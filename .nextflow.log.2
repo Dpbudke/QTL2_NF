@@ -1,0 +1,54 @@
+Aug-29 12:09:29.189 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf --help
+Aug-29 12:09:29.273 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 25.04.6
+Aug-29 12:09:29.310 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/dbudke/.nextflow/plugins; core-plugins: nf-amazon@2.15.0,nf-azure@1.16.0,nf-cloudcache@0.4.3,nf-codecommit@0.2.3,nf-console@1.2.1,nf-google@1.21.1,nf-k8s@1.0.0,nf-tower@1.11.4,nf-wave@1.12.1
+Aug-29 12:09:29.345 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Aug-29 12:09:29.347 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Aug-29 12:09:29.351 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Aug-29 12:09:29.366 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Aug-29 12:09:29.398 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /home/dbudke/QTL2_NF/nextflow.config
+Aug-29 12:09:29.402 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /home/dbudke/QTL2_NF/nextflow.config
+Aug-29 12:09:29.443 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/dbudke/.nextflow/secrets/store.json
+Aug-29 12:09:29.449 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@456be73c] - activable => nextflow.secret.LocalSecretsProvider@456be73c
+Aug-29 12:09:29.467 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+Aug-29 12:09:30.142 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 by global default
+Aug-29 12:09:30.159 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [trusting_gauss] DSL2 - revision: 0000000000
+Aug-29 12:09:30.162 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+Aug-29 12:09:30.163 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+Aug-29 12:09:30.232 [main] DEBUG nextflow.Session - Session UUID: 002827e8-c7f1-4641-9157-829b0cf44bfc
+Aug-29 12:09:30.233 [main] DEBUG nextflow.Session - Run name: trusting_gauss
+Aug-29 12:09:30.234 [main] DEBUG nextflow.Session - Executor pool size: 8
+Aug-29 12:09:30.245 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+Aug-29 12:09:30.252 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Aug-29 12:09:30.285 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 25.04.6 build 5954
+  Created: 01-07-2025 11:27 UTC (04:27 PDT)
+  System: Linux 4.4.0-19041-Microsoft
+  Runtime: Groovy 4.0.26 on OpenJDK 64-Bit Server VM 17.0.16+8-Ubuntu-0ubuntu122.04.1
+  Encoding: UTF-8 (UTF-8)
+  Process: 7251@ARSCADAV4FCHDW2 [127.0.1.1]
+  CPUs: 8 - Mem: 31.9 GB (22.2 GB) - Swap: 96 GB (95.9 GB)
+Aug-29 12:09:30.345 [main] DEBUG nextflow.Session - Work-dir: /home/dbudke/QTL2_NF/work [wslfs]
+Aug-29 12:09:30.368 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+Aug-29 12:09:30.380 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+Aug-29 12:09:30.403 [main] DEBUG nextflow.Session - Observer factory (v2): LinObserverFactory
+Aug-29 12:09:30.433 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+Aug-29 12:09:30.445 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 9; maxThreads: 1000
+Aug-29 12:09:30.539 [main] DEBUG nextflow.Session - Session start
+Aug-29 12:09:30.544 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow started -- trace file: /home/dbudke/QTL2_NF/results/trace.txt
+Aug-29 12:09:30.619 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+Aug-29 12:09:30.634 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: 
+Aug-29 12:09:30.635 [main] WARN  nextflow.Session - There's no process matching config selector: PHENOTYPE_PROCESS
+Aug-29 12:09:30.639 [main] DEBUG nextflow.Session - Igniting dataflow network (0)
+Aug-29 12:09:30.640 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_310e0edd47db6f72: /home/dbudke/QTL2_NF/main.nf
+Aug-29 12:09:30.640 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Aug-29 12:09:30.640 [main] DEBUG nextflow.Session - Session await
+Aug-29 12:09:30.640 [main] DEBUG nextflow.Session - Session await > all processes finished
+Aug-29 12:09:30.640 [main] DEBUG nextflow.Session - Session await > all barriers passed
+Aug-29 12:09:30.652 [main] DEBUG n.trace.WorkflowStatsObserver - Workflow completed > WorkflowStats[succeededCount=0; failedCount=0; ignoredCount=0; cachedCount=0; pendingCount=0; submittedCount=0; runningCount=0; retriesCount=0; abortedCount=0; succeedDuration=0ms; failedDuration=0ms; cachedDuration=0ms;loadCpus=0; loadMemory=0; peakRunning=0; peakCpus=0; peakMemory=0; ]
+Aug-29 12:09:30.652 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow completed -- saving trace file
+Aug-29 12:09:30.667 [main] DEBUG nextflow.trace.ReportObserver - Workflow completed -- rendering execution report
+Aug-29 12:09:31.251 [main] DEBUG nextflow.trace.TimelineObserver - Workflow completed -- rendering execution timeline
+Aug-29 12:09:31.374 [main] DEBUG nextflow.cache.CacheDB - Closing CacheDB done
+Aug-29 12:09:31.401 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'FileTransfer' shutdown completed (hard=false)
+Aug-29 12:09:31.401 [main] DEBUG nextflow.script.ScriptRunner - > Execution complete -- Goodbye

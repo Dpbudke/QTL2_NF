@@ -1,0 +1,440 @@
+Sep-02 12:34:20.236 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf --phenotype_file Data/formatted_phenotypes_for_nextflow.csv --prefix DOchln
+Sep-02 12:34:20.371 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 25.04.6
+Sep-02 12:34:20.417 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/dbudke/.nextflow/plugins; core-plugins: nf-amazon@2.15.0,nf-azure@1.16.0,nf-cloudcache@0.4.3,nf-codecommit@0.2.3,nf-console@1.2.1,nf-google@1.21.1,nf-k8s@1.0.0,nf-tower@1.11.4,nf-wave@1.12.1
+Sep-02 12:34:20.460 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Sep-02 12:34:20.462 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Sep-02 12:34:20.466 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Sep-02 12:34:20.486 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Sep-02 12:34:20.518 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /home/dbudke/QTL2_NF/nextflow.config
+Sep-02 12:34:20.522 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /home/dbudke/QTL2_NF/nextflow.config
+Sep-02 12:34:20.576 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/dbudke/.nextflow/secrets/store.json
+Sep-02 12:34:20.582 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@389562d6] - activable => nextflow.secret.LocalSecretsProvider@389562d6
+Sep-02 12:34:20.604 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+Sep-02 12:34:21.330 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
+Sep-02 12:34:21.355 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [loving_dubinsky] DSL2 - revision: 96cb9af0b2
+Sep-02 12:34:21.358 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+Sep-02 12:34:21.358 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+Sep-02 12:34:21.448 [main] DEBUG nextflow.Session - Session UUID: c22cd08b-d4c2-4111-92fc-3fba76e1d977
+Sep-02 12:34:21.448 [main] DEBUG nextflow.Session - Run name: loving_dubinsky
+Sep-02 12:34:21.449 [main] DEBUG nextflow.Session - Executor pool size: 8
+Sep-02 12:34:21.464 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+Sep-02 12:34:21.473 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Sep-02 12:34:21.523 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 25.04.6 build 5954
+  Created: 01-07-2025 11:27 UTC (04:27 PDT)
+  System: Linux 4.4.0-19041-Microsoft
+  Runtime: Groovy 4.0.26 on OpenJDK 64-Bit Server VM 17.0.16+8-Ubuntu-0ubuntu122.04.1
+  Encoding: UTF-8 (UTF-8)
+  Process: 9166@ARSCADAV4FCHDW2 [127.0.1.1]
+  CPUs: 8 - Mem: 31.9 GB (18.4 GB) - Swap: 96 GB (95.9 GB)
+Sep-02 12:34:21.581 [main] DEBUG nextflow.Session - Work-dir: /home/dbudke/QTL2_NF/work [wslfs]
+Sep-02 12:34:21.610 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+Sep-02 12:34:21.625 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+Sep-02 12:34:21.649 [main] DEBUG nextflow.Session - Observer factory (v2): LinObserverFactory
+Sep-02 12:34:21.682 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+Sep-02 12:34:21.699 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 9; maxThreads: 1000
+Sep-02 12:34:21.822 [main] DEBUG nextflow.Session - Session start
+Sep-02 12:34:21.827 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow started -- trace file: /home/dbudke/QTL2_NF/results/trace.txt
+Sep-02 12:34:21.829 [main] DEBUG nextflow.Session - Trace file already exists: /home/dbudke/QTL2_NF/results/trace.txt -- enable the 'trace.overwrite' option in your config file to overwrite existing files
+nextflow.exception.AbortOperationException: Trace file already exists: /home/dbudke/QTL2_NF/results/trace.txt -- enable the 'trace.overwrite' option in your config file to overwrite existing files
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:67)
+	at nextflow.trace.TraceFileObserver.onFlowCreate(TraceFileObserver.groovy:206)
+	at nextflow.Session$_notifyFlowCreate_lambda40.doCall(Session.groovy:1093)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowCreate(Session.groovy:1093)
+	at nextflow.Session.start(Session.groovy:585)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:133)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Caused by: java.nio.file.FileAlreadyExistsException: /home/dbudke/QTL2_NF/results/trace.txt
+	at java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:94)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:106)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111)
+	at java.base/sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:218)
+	at java.base/java.nio.file.spi.FileSystemProvider.newOutputStream(FileSystemProvider.java:484)
+	at java.base/java.nio.file.Files.newOutputStream(Files.java:228)
+	at java.base/java.nio.file.Files.newBufferedWriter(Files.java:3008)
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:64)
+	... 9 common frames omitted
+Sep-02 12:34:21.833 [main] DEBUG nextflow.Session - Report file already exists: /home/dbudke/QTL2_NF/results/report.html -- enable the 'report.overwrite' option in your config file to overwrite existing files
+nextflow.exception.AbortOperationException: Report file already exists: /home/dbudke/QTL2_NF/results/report.html -- enable the 'report.overwrite' option in your config file to overwrite existing files
+	at nextflow.trace.ReportObserver.onFlowCreate(ReportObserver.groovy:133)
+	at nextflow.Session$_notifyFlowCreate_lambda40.doCall(Session.groovy:1093)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowCreate(Session.groovy:1093)
+	at nextflow.Session.start(Session.groovy:585)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:133)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Sep-02 12:34:21.834 [main] DEBUG nextflow.Session - Timeline file already exists: /home/dbudke/QTL2_NF/results/timeline.html -- enable the 'timeline.overwrite' option in your config file to overwrite existing files
+nextflow.exception.AbortOperationException: Timeline file already exists: /home/dbudke/QTL2_NF/results/timeline.html -- enable the 'timeline.overwrite' option in your config file to overwrite existing files
+	at nextflow.trace.TimelineObserver.onFlowCreate(TimelineObserver.groovy:76)
+	at nextflow.Session$_notifyFlowCreate_lambda40.doCall(Session.groovy:1093)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowCreate(Session.groovy:1093)
+	at nextflow.Session.start(Session.groovy:585)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:133)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Sep-02 12:34:22.128 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+Sep-02 12:34:22.702 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PHENOTYPE_PROCESS` matches process PHENOTYPE_PROCESS
+Sep-02 12:34:22.719 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: local
+Sep-02 12:34:22.719 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Sep-02 12:34:22.731 [main] DEBUG nextflow.executor.Executor - [warm up] executor > local
+Sep-02 12:34:22.738 [main] DEBUG n.processor.LocalPollingMonitor - Creating local task monitor for executor 'local' > cpus=8; memory=31.9 GB; capacity=8; pollInterval=100ms; dumpInterval=5m
+Sep-02 12:34:22.742 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: local)
+Sep-02 12:34:22.773 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PHENOTYPE_PROCESS': maxForks=0; fair=false; array=0
+Sep-02 12:34:22.856 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: PHENOTYPE_PROCESS
+Sep-02 12:34:22.859 [main] DEBUG nextflow.Session - Igniting dataflow network (2)
+Sep-02 12:34:22.866 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PHENOTYPE_PROCESS
+Sep-02 12:34:22.867 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_a77158f85bce8745: /home/dbudke/QTL2_NF/modules/phenotype_process.nf
+  Script_8abc9f4ffa4d21e5: /home/dbudke/QTL2_NF/main.nf
+Sep-02 12:34:22.868 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Sep-02 12:34:22.868 [main] DEBUG nextflow.Session - Session await
+Sep-02 12:34:23.111 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+Sep-02 12:34:23.114 [Task submitter] INFO  nextflow.Session - [52/747971] Submitted process > PHENOTYPE_PROCESS (Processing phenotypes for DOchln)
+Sep-02 12:34:23.412 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 1; name: PHENOTYPE_PROCESS (Processing phenotypes for DOchln); status: COMPLETED; exit: 126; error: -; workDir: /home/dbudke/QTL2_NF/work/52/747971097bef19dfacc6c32713efa2]
+Sep-02 12:34:23.413 [Task monitor] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'TaskFinalizer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Sep-02 12:34:23.426 [TaskFinalizer-1] DEBUG nextflow.processor.TaskProcessor - Handling unexpected condition for
+  task: name=PHENOTYPE_PROCESS (Processing phenotypes for DOchln); work-dir=/home/dbudke/QTL2_NF/work/52/747971097bef19dfacc6c32713efa2
+  error [nextflow.exception.ProcessFailedException]: Process `PHENOTYPE_PROCESS (Processing phenotypes for DOchln)` terminated with an error exit status (126)
+Sep-02 12:34:23.450 [TaskFinalizer-1] ERROR nextflow.processor.TaskProcessor - Error executing process > 'PHENOTYPE_PROCESS (Processing phenotypes for DOchln)'
+
+Caused by:
+  Process `PHENOTYPE_PROCESS (Processing phenotypes for DOchln)` terminated with an error exit status (126)
+
+
+Command executed:
+
+  #!/usr/bin/env Rscript
+  
+  # Load required libraries
+  suppressPackageStartupMessages({
+      library(dplyr)
+      library(gplots)
+      library(qtl2)
+  })
+  
+  # Source custom functions
+  source("/home/dbudke/QTL2_NF/bin/changeRN.R")
+  source("/home/dbudke/QTL2_NF/bin/robustZmat.R") 
+  source("/home/dbudke/QTL2_NF/bin/covCheck.R")
+  
+  # Initialize validation report
+  validation_log <- c()
+  validation_log <- c(validation_log, paste("=== Phenotype Processing Validation Report ==="))
+  validation_log <- c(validation_log, paste("Timestamp:", Sys.time()))
+  validation_log <- c(validation_log, paste("Study Prefix:", "DOchln"))
+  validation_log <- c(validation_log, paste("Input File:", "formatted_phenotypes_for_nextflow.csv"))
+  validation_log <- c(validation_log, "")
+  
+  # Read the phenotype file
+  phenPath <- "formatted_phenotypes_for_nextflow.csv"
+  
+  # Validate file exists and is readable
+  if (!file.exists(phenPath)) {
+      stop("Phenotype file not found: ", phenPath)
+  }
+  
+  validation_log <- c(validation_log, "✓ Input file exists and is readable")
+  
+  # Find the delineation between covariates and phenotypes
+  # This handles the DO_pipe format with labels in first row
+  firstRow <- tryCatch({
+      read.csv(phenPath, nrows=1, fill = TRUE, header = FALSE)
+  }, error = function(e) {
+      stop("Error reading first row of phenotype file: ", e$message)
+  })
+  
+  phenStart <- which(firstRow != "")
+  
+  if (length(phenStart) < 2) {
+      stop("Could not find proper covariate/phenotype delineation in first row")
+  }
+  
+  validation_log <- c(validation_log, paste("✓ Found covariate/phenotype boundaries at positions:", paste(phenStart, collapse=", ")))
+  
+  # Pull in phenotype file
+  mPhen <- tryCatch({
+      read.csv(phenPath, 
+               header = TRUE,
+               row.names = 1,
+               na.strings = c("na","NA","N/A",""),
+               skip = 1)
+  }, error = function(e) {
+      stop("Error reading phenotype data: ", e$message)
+  })
+  
+  validation_log <- c(validation_log, paste("✓ Successfully read phenotype file"))
+  validation_log <- c(validation_log, paste("  - Dimensions:", nrow(mPhen), "individuals x", ncol(mPhen), "variables"))
+  
+  # Handle row name transformations (non-interactive version)
+  # Note: changeRN.R requires interactive input, so we'll skip this step
+  # Users can manually prefix sample IDs in their input file if needed
+  original_rownames <- rownames(mPhen)
+  
+  # Optional: Apply study prefix to sample IDs automatically
+  if (!"false" %in% c("false", "FALSE", "")) {
+      rownames(mPhen) <- paste0("DOchln_", rownames(mPhen))
+      validation_log <- c(validation_log, "✓ Applied automatic sample ID prefixing")
+  } else {
+      validation_log <- c(validation_log, "✓ Kept original sample IDs (no prefix applied)")
+  }
+  
+  # Extract covariate and phenotype data
+  covar_cols <- 1:(phenStart[2]-1)
+  pheno_cols <- phenStart[2]:ncol(mPhen)
+  
+  # Validate covariate section
+  covar_data <- mPhen[, covar_cols, drop = FALSE]
+  pheno_data <- mPhen[, pheno_cols, drop = FALSE]
+  
+  validation_log <- c(validation_log, paste("✓ Extracted covariates:", ncol(covar_data), "columns"))
+  validation_log <- c(validation_log, paste("✓ Extracted phenotypes:", ncol(pheno_data), "columns"))
+  
+  # Validate required covariates for r/qtl2
+  required_covars <- c("sex", "ngen")
+  missing_covars <- setdiff(required_covars, tolower(colnames(covar_data)))
+  
+  if (length(missing_covars) > 0) {
+      validation_log <- c(validation_log, paste("⚠ WARNING: Missing required covariates:", paste(missing_covars, collapse=", ")))
+      validation_log <- c(validation_log, "  These are required for proper r/qtl2 cross object creation")
+  } else {
+      validation_log <- c(validation_log, "✓ All required covariates present (sex, ngen)")
+  }
+  
+  # Check phenotype data is strictly numeric
+  non_numeric_phenos <- !sapply(pheno_data, is.numeric)
+  if (any(non_numeric_phenos)) {
+      problematic_cols <- colnames(pheno_data)[non_numeric_phenos]
+      stop("Non-numeric data found in phenotype columns: ", paste(problematic_cols, collapse=", "),
+           "\nPhenotype matrix must be strictly numeric for r/qtl2 compatibility")
+  }
+  
+  validation_log <- c(validation_log, "✓ All phenotype columns are numeric")
+  
+  # Check for sample ID consistency
+  sample_ids <- rownames(mPhen)
+  duplicate_ids <- sample_ids[duplicated(sample_ids)]
+  if (length(duplicate_ids) > 0) {
+      stop("Duplicate sample IDs found: ", paste(duplicate_ids, collapse=", "))
+  }
+  
+  validation_log <- c(validation_log, "✓ No duplicate sample IDs")
+  validation_log <- c(validation_log, paste("✓ Sample ID format example:", head(sample_ids, 3)))
+  
+  # Write out the covar file
+  write.csv(covar_data, 
+            file = paste0("DOchln_covar.csv"), 
+            row.names = TRUE)
+  
+  # Write out the pheno file  
+  write.csv(pheno_data, 
+            file = paste0("DOchln_pheno.csv"), 
+            row.names = TRUE)
+  
+  validation_log <- c(validation_log, "✓ Successfully wrote covariate file")
+  validation_log <- c(validation_log, "✓ Successfully wrote phenotype file")
+  
+  # Generate diagnostic plots if data is suitable
+  tryCatch({
+      # Create diagnostic directory
+      dir.create("diagnostic_plots", recursive = TRUE)
+  
+      # Check if we have enough data for diagnostics
+      if (ncol(pheno_data) < 2 || nrow(pheno_data) < 10) {
+          validation_log <<- c(validation_log, "⚠ WARNING: Insufficient data for diagnostic plots (need ≥2 phenotypes, ≥10 samples)")
+      } else {
+  
+          # Plot 1 & 2 - Robust Z-score matrices
+          tryCatch({
+              # Load robustZmat function (without changeRN dependency)
+              source("/home/dbudke/QTL2_NF/bin/robustZmat.R")
+  
+              # Full matrix plot
+              robustZmat(pheno_data,
+                         prefix = "DOchln",
+                         path = './diagnostic_plots/',
+                         rowFont = 1,
+                         colFont = 10,
+                         margins = c(150,45),
+                         pdfWid = 150,
+                         pdfHei = 150)
+  
+              # Zoomed outlier plot
+              robustZmat(pheno_data,
+                         prefix = "DOchln",
+                         path = './diagnostic_plots/',
+                         rowFont = 10,
+                         colFont = 20,
+                         zoom = TRUE,
+                         valSize = 20,
+                         margins = c(100,60))
+  
+              validation_log <<- c(validation_log, "✓ Generated robust Z-score diagnostic plots")
+  
+          }, error = function(e) {
+              if (grepl("no outliers", e$message)) {
+                  validation_log <<- c(validation_log, "✓ No outliers detected in data (robust Z-score plots skipped)")
+              } else {
+                  validation_log <<- c(validation_log, paste("⚠ WARNING: Robust Z-score plots failed:", e$message))
+              }
+          })
+  
+          # Plot 3 - Batch effect diagnostic  
+          tryCatch({
+              source("/home/dbudke/QTL2_NF/bin/covCheck.R")
+  
+              covCheck(covar_data, pheno_data,
+                       prefix = "DOchln",
+                       path = './diagnostic_plots/',
+                       pdfWid = 100,
+                       pdfHei = 100,
+                       margins = c(100,80),
+                       rowFont = 15, 
+                       colFont = 10)
+  
+              validation_log <<- c(validation_log, "✓ Generated batch effect diagnostic plots")
+  
+          }, error = function(e) {
+              validation_log <<- c(validation_log, paste("⚠ WARNING: Batch effect plots failed:", e$message))
+          })
+      }
+  
+  }, error = function(e) {
+      validation_log <<- c(validation_log, paste("⚠ WARNING: Diagnostic plot generation failed:", e$message))
+  })
+  
+  # Final validation summary
+  validation_log <- c(validation_log, "")
+  validation_log <- c(validation_log, "=== Summary ===")
+  validation_log <- c(validation_log, paste("Total individuals:", nrow(mPhen)))
+  validation_log <- c(validation_log, paste("Total covariates:", ncol(covar_data)))
+  validation_log <- c(validation_log, paste("Total phenotypes:", ncol(pheno_data)))
+  validation_log <- c(validation_log, "Files ready for r/qtl2 processing")
+  
+  # Write validation report
+  writeLines(validation_log, "validation_report.txt")
+  
+  cat("Phenotype processing completed successfully\n")
+  cat("Check validation_report.txt for detailed information\n")
+
+Command exit status:
+  126
+
+Command output:
+  (empty)
+
+Command error:
+  /usr/bin/env: ‘Rscript’: Permission denied
+
+Work dir:
+  /home/dbudke/QTL2_NF/work/52/747971097bef19dfacc6c32713efa2
+
+Tip: view the complete command output by changing to the process work dir and entering the command `cat .command.out`
+Sep-02 12:34:23.462 [TaskFinalizer-1] DEBUG nextflow.Session - Cannot invoke "groovyx.gpars.agent.Agent.send(Object)" because "this.writer" is null
+java.lang.NullPointerException: Cannot invoke "groovyx.gpars.agent.Agent.send(Object)" because "this.writer" is null
+	at nextflow.trace.TraceFileObserver.onProcessComplete(TraceFileObserver.groovy:270)
+	at nextflow.Session$_notifyTaskComplete_lambda34.doCall(Session.groovy:1063)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyTaskComplete(Session.groovy:1063)
+	at nextflow.processor.TaskPollingMonitor.finalizeTask(TaskPollingMonitor.groovy:699)
+	at nextflow.processor.TaskPollingMonitor.safeFinalizeTask(TaskPollingMonitor.groovy:686)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.codehaus.groovy.reflection.CachedMethod.invoke(CachedMethod.java:343)
+	at groovy.lang.MetaMethod.doMethodInvoke(MetaMethod.java:328)
+	at groovy.lang.MetaClassImpl.doInvokeMethod(MetaClassImpl.java:1333)
+	at groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1088)
+	at groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1007)
+	at org.codehaus.groovy.runtime.InvokerHelper.invokePogoMethod(InvokerHelper.java:645)
+	at org.codehaus.groovy.runtime.InvokerHelper.invokeMethod(InvokerHelper.java:628)
+	at org.codehaus.groovy.runtime.InvokerHelper.invokeMethodSafe(InvokerHelper.java:82)
+	at nextflow.processor.TaskPollingMonitor$_checkTaskStatus_lambda8.doCall(TaskPollingMonitor.groovy:676)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Sep-02 12:34:23.462 [main] DEBUG nextflow.Session - Session await > all processes finished
+Sep-02 12:34:23.481 [TaskFinalizer-1] DEBUG nextflow.Session - Session aborted -- Cause: Process `PHENOTYPE_PROCESS (Processing phenotypes for DOchln)` terminated with an error exit status (126)
+Sep-02 12:34:23.496 [Task monitor] DEBUG n.processor.TaskPollingMonitor - <<< barrier arrives (monitor: local) - terminating tasks monitor poll loop
+Sep-02 12:34:23.497 [main] DEBUG nextflow.Session - Session await > all barriers passed
+Sep-02 12:34:23.504 [main] INFO  nextflow.script.BaseScript - Workflow completed at: 2025-09-02T12:34:23.501084200-07:00
+Sep-02 12:34:23.507 [TaskFinalizer-1] WARN  nextflow.util.SimpleAgent - Got an interrupted exception while taking agent result | java.lang.InterruptedException
+Sep-02 12:34:23.619 [main] INFO  nextflow.script.BaseScript - Execution status: failed
+Sep-02 12:34:23.625 [main] DEBUG n.trace.WorkflowStatsObserver - Workflow completed > WorkflowStats[succeededCount=0; failedCount=1; ignoredCount=0; cachedCount=0; pendingCount=0; submittedCount=0; runningCount=0; retriesCount=0; abortedCount=0; succeedDuration=0ms; failedDuration=227ms; cachedDuration=0ms;loadCpus=0; loadMemory=0; peakRunning=1; peakCpus=1; peakMemory=8 GB; ]
+Sep-02 12:34:23.625 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow completed -- saving trace file
+Sep-02 12:34:23.625 [main] DEBUG nextflow.Session - Cannot invoke "groovyx.gpars.agent.Agent.await()" because "this.writer" is null
+java.lang.NullPointerException: Cannot invoke "groovyx.gpars.agent.Agent.await()" because "this.writer" is null
+	at nextflow.trace.TraceFileObserver.onFlowComplete(TraceFileObserver.groovy:221)
+	at nextflow.Session$_notifyFlowComplete_lambda45.doCall(Session.groovy:1107)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowComplete(Session.groovy:1107)
+	at nextflow.Session.shutdown0(Session.groovy:768)
+	at nextflow.Session.destroy(Session.groovy:713)
+	at nextflow.script.ScriptRunner.shutdown(ScriptRunner.groovy:263)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:147)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Sep-02 12:34:23.625 [main] DEBUG nextflow.trace.ReportObserver - Workflow completed -- rendering execution report
+Sep-02 12:34:24.145 [main] WARN  nextflow.trace.ReportObserver - Failed to render execution report -- see the log file for details
+nextflow.exception.AbortOperationException: Report file already exists: /home/dbudke/QTL2_NF/results/report.html -- enable the 'report.overwrite' option in your config file to overwrite existing files
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:67)
+	at nextflow.trace.ReportObserver.renderHtml(ReportObserver.groovy:284)
+	at nextflow.trace.ReportObserver.onFlowComplete(ReportObserver.groovy:143)
+	at nextflow.Session$_notifyFlowComplete_lambda45.doCall(Session.groovy:1107)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowComplete(Session.groovy:1107)
+	at nextflow.Session.shutdown0(Session.groovy:768)
+	at nextflow.Session.destroy(Session.groovy:713)
+	at nextflow.script.ScriptRunner.shutdown(ScriptRunner.groovy:263)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:147)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Caused by: java.nio.file.FileAlreadyExistsException: /home/dbudke/QTL2_NF/results/report.html
+	at java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:94)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:106)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111)
+	at java.base/sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:218)
+	at java.base/java.nio.file.spi.FileSystemProvider.newOutputStream(FileSystemProvider.java:484)
+	at java.base/java.nio.file.Files.newOutputStream(Files.java:228)
+	at java.base/java.nio.file.Files.newBufferedWriter(Files.java:3008)
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:64)
+	... 12 common frames omitted
+Sep-02 12:34:24.146 [main] DEBUG nextflow.trace.TimelineObserver - Workflow completed -- rendering execution timeline
+Sep-02 12:34:24.218 [main] WARN  nextflow.trace.TimelineObserver - Failed to render execution timeline -- see the log file for details
+nextflow.exception.AbortOperationException: Timeline file already exists: /home/dbudke/QTL2_NF/results/timeline.html -- enable the 'timeline.overwrite' option in your config file to overwrite existing files
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:67)
+	at nextflow.trace.TimelineObserver.renderHtml(TimelineObserver.groovy:178)
+	at nextflow.trace.TimelineObserver.onFlowComplete(TimelineObserver.groovy:87)
+	at nextflow.Session$_notifyFlowComplete_lambda45.doCall(Session.groovy:1107)
+	at nextflow.Session.notifyEvent(Session.groovy:1138)
+	at nextflow.Session.notifyFlowComplete(Session.groovy:1107)
+	at nextflow.Session.shutdown0(Session.groovy:768)
+	at nextflow.Session.destroy(Session.groovy:713)
+	at nextflow.script.ScriptRunner.shutdown(ScriptRunner.groovy:263)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:147)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:379)
+	at nextflow.cli.Launcher.run(Launcher.groovy:513)
+	at nextflow.cli.Launcher.main(Launcher.groovy:673)
+Caused by: java.nio.file.FileAlreadyExistsException: /home/dbudke/QTL2_NF/results/timeline.html
+	at java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:94)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:106)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111)
+	at java.base/sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:218)
+	at java.base/java.nio.file.spi.FileSystemProvider.newOutputStream(FileSystemProvider.java:484)
+	at java.base/java.nio.file.Files.newOutputStream(Files.java:228)
+	at java.base/java.nio.file.Files.newBufferedWriter(Files.java:3008)
+	at nextflow.trace.TraceHelper.newFileWriter(TraceHelper.groovy:64)
+	... 12 common frames omitted
+Sep-02 12:34:24.226 [main] DEBUG nextflow.cache.CacheDB - Closing CacheDB done
+Sep-02 12:34:24.244 [main] DEBUG nextflow.script.ScriptRunner - > Execution complete -- Goodbye
