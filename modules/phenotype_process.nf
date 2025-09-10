@@ -1,6 +1,6 @@
 process PHENOTYPE_PROCESS {
     tag "Processing phenotypes for ${prefix}"
-    publishDir "${params.outdir}/inputs-processed", mode: 'copy'
+    publishDir "${params.outdir}/01_phenotype_processing", mode: 'copy'
     
     input:
     path(phenotype_file)
@@ -35,7 +35,7 @@ process PHENOTYPE_PROCESS {
     validation_log <- c(validation_log, paste("Input File:", "${phenotype_file}"))
     validation_log <- c(validation_log, "")
     
-    # Read the phenotype file
+    # Read the phenotype file using params for na.strings
     phenPath <- "${phenotype_file}"
     
     # Validate file exists and is readable
@@ -66,7 +66,7 @@ process PHENOTYPE_PROCESS {
         read.csv(phenPath, 
                  header = TRUE,
                  row.names = 1,
-                 na.strings = c("na","NA","N/A",""),
+                 na.strings = c("na", "NA", "N/A", ""),
                  skip = 1)
     }, error = function(e) {
         stop("Error reading phenotype data: ", e\$message)
@@ -79,7 +79,7 @@ process PHENOTYPE_PROCESS {
     original_rownames <- rownames(mPhen)
     
     # Optional: Apply study prefix to sample IDs automatically
-    if (!"${params.auto_prefix_samples}" %in% c("false", "FALSE", "")) {
+    if ("${params.auto_prefix_samples}" == "true") {
         rownames(mPhen) <- paste0("${prefix}_", rownames(mPhen))
         validation_log <- c(validation_log, "✓ Applied automatic sample ID prefixing")
     } else {
@@ -99,13 +99,25 @@ process PHENOTYPE_PROCESS {
     
     # Validate required covariates for r/qtl2
     required_covars <- c("sex", "ngen")
-    missing_covars <- setdiff(required_covars, tolower(colnames(covar_data)))
+    # Also check for alternative column names
+    covar_names_lower <- tolower(colnames(covar_data))
+    
+    # Check for sex column
+    has_sex <- any(c("sex") %in% covar_names_lower)
+    
+    # Check for generation column (ngen or generation)
+    has_ngen <- any(c("ngen", "generation") %in% covar_names_lower)
+    
+    missing_covars <- c()
+    if (!has_sex) missing_covars <- c(missing_covars, "sex")
+    if (!has_ngen) missing_covars <- c(missing_covars, "ngen/generation")
     
     if (length(missing_covars) > 0) {
         validation_log <- c(validation_log, paste("⚠ WARNING: Missing required covariates:", paste(missing_covars, collapse=", ")))
         validation_log <- c(validation_log, "  These are required for proper r/qtl2 cross object creation")
+        validation_log <- c(validation_log, paste("  Available covariates:", paste(colnames(covar_data), collapse=", ")))
     } else {
-        validation_log <- c(validation_log, "✓ All required covariates present (sex, ngen)")
+        validation_log <- c(validation_log, "✓ All required covariates present (sex, ngen/generation)")
     }
     
     # Check phenotype data is strictly numeric
@@ -149,6 +161,10 @@ process PHENOTYPE_PROCESS {
         # Check if we have enough data for diagnostics
         if (ncol(pheno_data) < 2 || nrow(pheno_data) < 10) {
             validation_log <<- c(validation_log, "⚠ WARNING: Insufficient data for diagnostic plots (need ≥2 phenotypes, ≥10 samples)")
+        } else if (ncol(pheno_data) > 100) {
+            validation_log <<- c(validation_log, "⚠ INFO: Skipping diagnostic plots for large phenotype dataset (>100 phenotypes)")
+            validation_log <<- c(validation_log, "  This is typical for eQTL datasets to avoid memory/time constraints")
+            validation_log <<- c(validation_log, "  Data validation and file processing completed successfully")
         } else {
             
             # Plot 1 & 2 - Robust Z-score matrices
