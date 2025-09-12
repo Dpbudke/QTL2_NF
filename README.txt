@@ -97,3 +97,8 @@ The final module creates a comprehensive .RData object containing all QTL mappin
 - **Seamless integration** with the broader Jackson Laboratory QTL analysis ecosystem
 
 Users can launch a local instance of the QTL Viewer populated with their study results, providing an intuitive interface for exploring and sharing QTL findings.
+
+To Add:
+- explain users need to upload data into Data/ (pheno csv, FinalReport.txt, ect)
+- give credits to Excel DO_pipe for inspo -- ensure relevant Broman links are embedded here
+- Note people will need to update their SLURM scheduler config in "nextflow.config"

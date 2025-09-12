@@ -23,7 +23,6 @@ process GENOTYPE_PROCESS {
         library(readr)
         library(qtl2)
         library(data.table)
-        library(reshape2)
     })
     
     # Initialize validation report
@@ -105,10 +104,10 @@ process GENOTYPE_PROCESS {
     
     validation_log <- c(validation_log, paste("✓ Loaded allele codes:", nrow(allele_codes), "markers"))
     
-    # Test mode: filter allele codes to chromosome M only BEFORE merging
+    # Test mode: filter allele codes to chromosome 19 only BEFORE merging
     if ("${params.test_mode}" == "true") {
-        allele_codes <- allele_codes[allele_codes\$chr == "M", ]
-        validation_log <- c(validation_log, "⚠ TEST MODE: Filtered allele codes to chromosome M only")
+        allele_codes <- allele_codes[allele_codes\$chr == "19", ]
+        validation_log <- c(validation_log, "⚠ TEST MODE: Filtered allele codes to chromosome 19 only")
         validation_log <- c(validation_log, paste("  Reduced to", nrow(allele_codes), "markers for processing"))
     }
     
@@ -177,15 +176,15 @@ process GENOTYPE_PROCESS {
     
     validation_log <- c(validation_log, "✓ Successfully identified required columns")
     
-    # Test mode: filter FinalReport data to only chromosome M markers BEFORE merging
+    # Test mode: filter FinalReport data to only chromosome 19 markers BEFORE merging
     if ("${params.test_mode}" == "true") {
-        # Get list of chromosome M markers from allele codes
-        chr_m_markers <- allele_codes[allele_codes\$chr == "M", "marker"]
+        # Get list of chromosome 19 markers from allele codes
+        chr_19_markers <- allele_codes[allele_codes\$chr == "19", "marker"]
         
         # Filter FinalReport data to only these markers
-        geno_data <- geno_data[geno_data[[snp_col]] %in% chr_m_markers, ]
+        geno_data <- geno_data[geno_data[[snp_col]] %in% chr_19_markers, ]
         
-        validation_log <- c(validation_log, paste("⚠ TEST MODE: Filtered FinalReport to", nrow(geno_data), "genotype calls for chromosome M"))
+        validation_log <- c(validation_log, paste("⚠ TEST MODE: Filtered FinalReport to", nrow(geno_data), "genotype calls for chromosome 19"))
     }
     
     # Get unique samples and SNPs
@@ -256,7 +255,7 @@ process GENOTYPE_PROCESS {
         geno_merged\$qtl2_call <- "H"
     }
     
-    # Create chromosome-specific files
+    # Create chromosome-specific files using DO_pipe matrix approach
     chromosomes <- sort(unique(geno_merged[[chr_col]]))
     validation_log <- c(validation_log, paste("✓ Found chromosomes:", paste(chromosomes, collapse = ", ")))
     
@@ -268,13 +267,22 @@ process GENOTYPE_PROCESS {
         
         if (nrow(chr_data) == 0) next
         
-        geno_matrix <- dcast(chr_data, 
-                            get(snp_col) ~ get(sample_col), 
-                            value.var = "qtl2_call", 
-                            fill = "-")
+        # Get unique markers and samples for this chromosome
+        chr_markers <- unique(chr_data[[snp_col]])
+        chr_samples <- unique(chr_data[[sample_col]])
         
-        rownames(geno_matrix) <- geno_matrix[,1]
-        geno_matrix <- geno_matrix[,-1]
+        # Create matrix like DO_pipe (handles duplicates by overwriting)
+        geno_matrix <- matrix(nrow = length(chr_markers), ncol = length(chr_samples))
+        dimnames(geno_matrix) <- list(chr_markers, chr_samples)
+        
+        # Fill matrix - this handles duplicates by overwriting like DO_pipe
+        for (i in seq_along(chr_samples)) {
+            sample_data <- chr_data[chr_data[[sample_col]] == chr_samples[i], ]
+            geno_matrix[sample_data[[snp_col]], i] <- sample_data\$qtl2_call
+        }
+        
+        # Replace NAs with "-"
+        geno_matrix[is.na(geno_matrix)] <- "-"
         
         chr_filename <- paste0("${prefix}_geno", chr, ".csv")
         write.csv(geno_matrix, chr_filename, row.names = TRUE)

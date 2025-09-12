@@ -29,7 +29,7 @@ def helpMessage() {
         --finalreport_file  Path to GeneSeek FinalReport file
         --outdir            Output directory [default: results]
         --auto_prefix_samples    Automatically prefix sample IDs [default: false]
-        --test_mode         Process chromosome 1 only (for development) [default: false]
+        --test_mode         Process chromosome 19 only (for development) [default: false]
     
     Example:
         nextflow run main.nf \\
@@ -40,7 +40,7 @@ def helpMessage() {
     
     Profiles:
         -profile standard   Local execution with Docker (default)
-        -profile test       Run with test data
+        -profile test       Run with test data (chr 19 only)
         -profile docker     Explicit Docker profile
     
     """.stripIndent()
@@ -106,6 +106,7 @@ workflow {
     phenotype_file : ${params.phenotype_file}
     study_prefix   : ${params.study_prefix}
     outdir         : ${params.outdir}
+    test_mode      : ${params.test_mode ? 'true (chr 19 only)' : 'false'}
     ========================================
     """.stripIndent()
 
@@ -172,6 +173,7 @@ workflow.onComplete {
     Time     : ${workflow.duration}
     Workdir  : ${workflow.workDir}
     Results  : ${params.outdir}
+    Test Mode: ${params.test_mode ? 'Enabled (chr 19 only)' : 'Disabled'}
     ========================================
     """.stripIndent()
     

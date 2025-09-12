@@ -1,1 +1,6 @@
 Data/
+R_Data/
+test_results/
+nextflow_work/
+singularity_cache/
+.nextflow/
