@@ -7,21 +7,9 @@ output: html_document
 
 **Purpose**
 
-This documentation serves as the only preparatory step to run the automated "QTL2_NF" Nextflow bioinformatic pipeline. In order to automatically implement a full QTL, from Broman's r/qtl2, pipeline, we first need our project specific input metadata/phenotype data in a combined csv file.
+This documentation serves as the only preparatory step to run the automated "QTL2_NF" Nextflow bioinformatic pipeline. In order to automatically implement a full QTL, from Broman's r/qtl2, pipeline, we first need our project specific input metadata/phenotype data in a combined csv file. This preparatory document generates an input into nf QTL2_NF for all QTL analyses (QTL, eQTL, mQTL, etc).
 
-**Overview**
-
-Section 1: Load and merge metadata + phenotypes (physical phenotypes (QTL), transcript counts (eQTL), metabolite counts (mQTL), etc) – input Module 1
-
-Section 2: Download MUGA reference files – input Modules 2/3
-
-Section 3: Download mouse gene database – input Modules 2/3
-
-Section 4: Validate file formats and compatibility
-
-Section 5: Create organized input directory structure
-
-**File Format Requirements**
+**Output File Format Requirements**
 
 Row 1:
 
@@ -33,13 +21,11 @@ Row 1:
 
 Row 2:
 
--   actual column names (SampleID, sex, ngen, batch, transcript/pehno names..)
+-   actual column names (SampleID, sex, ngen, batch, transcript/pheno names..)
 
 Remaining rows = sample data
 
-## 
-
-## Load Libraries
+# 1. Load Libraries
 
 ```{r}
 # Clear environment to start fresh (if necessary)
@@ -48,33 +34,84 @@ rm(list = ls())
 library(openxlsx)
 library(dplyr)
 library(tibble)
+library(edgeR)
+
 ```
 
-# 1. Load and merge metadata and phenotype data
+# 2. Load metadata and phenotype data
 
 ```{r}
 # Load data
-Metadata = read.xlsx("DOCholine_AllBatches_Metadata_220202.xlsx")
-Phenotypes = read.csv("DOCHLN_combined_counts.csv")
+Metadata = read.xlsx("R_Data/DOCholine_AllBatches_Metadata_220202.xlsx")
+Phenotypes = read.csv("R_Data/DOCHLN_combined_counts.csv")
 
 # 382 common samples
+```
 
-###############
-# Project-specific modifications
-###############
+# 3. Filter/normalize RNA-seq Data
 
+```{r}
+# Note: This section applies when performing an eQTL analysis where we should remove low expressed transcripts, counts per million (CPM) normalize, and transform (appropriate for linear modeling) the raw counts 
+
+# 1. Filtering = EdgeR/limma-voom DGEList() → calcNormFactors() → filterByExpr()
+# 2. Between-sample library-size normalization = cpm()
+# 3. Gene-wise distribution normalization = IRN function 
+
+# Your filtering pipeline
+d0 <- DGEList(Phenotypes)
+d0 <- calcNormFactors(d0)
+keep <- filterByExpr(d0)
+d <- d0[keep,]
+
+# Get log CPM values
+logcpm <- cpm(d, prior.count=2, log=TRUE)
+
+# Extract the filtered gene names from the genes slot
+filtered_gene_names <- d$genes$X  # Gene names for retained genes
+rownames(logcpm) <- filtered_gene_names
+
+# Now check - should show Ensembl IDs
+head(rownames(logcpm))
+
+# IRN function (gene-wise)
+inverse_rank_normalize <- function(x, na.rm = TRUE) {
+  if (na.rm) {
+    ranks <- rank(x, na.last = "keep", ties.method = "average")
+    n <- sum(!is.na(x))
+    q <- (ranks - 0.5) / n
+    return(qnorm(q))
+  } else {
+    ranks <- rank(x, ties.method = "average")
+    n <- length(x)
+    q <- (ranks - 0.5) / n
+    return(qnorm(q))
+  }
+}
+
+# This is CORRECT for gene-wise normalization  
+Phenotypes2 <- t(apply(logcpm, 1, inverse_rank_normalize))  # Gene-wise normalization
+
+# Gene names are preserved as rownames
+head(rownames(Phenotypes2))
+```
+
+# 4. Project-specific modifications
+
+```{r}
 # Step 1: Remove duplicate samples FIRST (using original naming format)
 duplicate_ids <- c("323", "368", "371", "372", "374", "376")
 duplicate_columns <- paste0("DOCHLN", duplicate_ids)  # Original format without underscore
 
-cat("Original phenotype column names (first 10):\n")
-print(colnames(Phenotypes)[1:10])
+cat("Original sample column names (first 10):\n")
+print(colnames(Phenotypes2)[1:10])
 
 cat("Looking for duplicate columns to remove:\n")
-print(intersect(duplicate_columns, colnames(Phenotypes)))
+print(intersect(duplicate_columns, colnames(Phenotypes2)))
 
-Phenotypes_clean <- Phenotypes %>% 
- select(-all_of(duplicate_columns))
+# Convert to data.frame, then use dplyr
+Phenotypes_clean <- Phenotypes2 %>% 
+  as.data.frame() %>%
+  select(-all_of(duplicate_columns))
 
 cat("Removed", length(duplicate_columns), "duplicate samples\n")
 cat("Clean phenotypes dimensions:", dim(Phenotypes_clean), "\n")
@@ -114,12 +151,13 @@ phenotype_pattern <- unique(substr(colnames(Phenotypes_clean)[grep("DOchln", col
 cat("\nStandardization check:\n")
 cat("Metadata prefix patterns:", paste(metadata_pattern, collapse = ", "), "\n")
 cat("Phenotype prefix patterns:", paste(phenotype_pattern, collapse = ", "), "\n")
+```
 
+# 5. Generate r/qtl2 - QTL2_NF input 
+
+```{r}
 # Step 4: Transpose phenotype data (samples as rows, transcripts as columns)
-Phenotypes_transposed <- Phenotypes_clean %>%
- column_to_rownames("X") %>%  
- t() %>%                      
- as.data.frame()
+Phenotypes_transposed <- t(Phenotypes_clean) %>% as.data.frame()
 
 cat("Transposed phenotypes dimensions:", dim(Phenotypes_transposed), "\n")
 
@@ -137,28 +175,26 @@ cat("Samples only in phenotypes:", length(phenotype_only), "\n")
 
 # Step 6: Merge datasets keeping only samples present in both
 if(length(common_samples) > 0) {
- Metadata_indexed <- Metadata %>% column_to_rownames("mouse_ID")
- Metadata_matched <- Metadata_indexed[common_samples, ]
- Phenotypes_matched <- Phenotypes_transposed[common_samples, ]
- 
- stopifnot(identical(rownames(Metadata_matched), rownames(Phenotypes_matched)))
- 
- Combined_data <- cbind(Metadata_matched, Phenotypes_matched)
- 
- cat("Final combined dataset dimensions:", dim(Combined_data), "\n")
- cat("Number of metadata columns:", ncol(Metadata_matched), "\n")
- cat("Number of transcript columns:", ncol(Phenotypes_matched), "\n")
- cat("First few column names:\n")
- print(colnames(Combined_data)[1:10])
+  Metadata_indexed <- Metadata %>% column_to_rownames("mouse_ID")
+  Metadata_matched <- Metadata_indexed[common_samples, ]
+  Phenotypes_matched <- Phenotypes_transposed[common_samples, ]
+  
+  stopifnot(identical(rownames(Metadata_matched), rownames(Phenotypes_matched)))
+  
+  Combined_data <- cbind(Metadata_matched, Phenotypes_matched)
+  
+  cat("Final combined dataset dimensions:", dim(Combined_data), "\n")
+  cat("Number of metadata columns:", ncol(Metadata_matched), "\n")
+  cat("Number of transcript columns:", ncol(Phenotypes_matched), "\n")
+  cat("First few column names:\n")
+  print(colnames(Combined_data)[1:10])
 } else {
- cat("ERROR: No overlapping samples found after standardization!\n")
- cat("Sample debugging info:\n")
- cat("First few metadata samples:", head(metadata_samples, 5), "\n")
- cat("First few phenotype samples:", head(phenotype_samples, 5), "\n")
+  cat("ERROR: No overlapping samples found after standardization!\n")
+  cat("Sample debugging info:\n")
+  cat("First few metadata samples:", head(metadata_samples, 5), "\n")
+  cat("First few phenotype samples:", head(phenotype_samples, 5), "\n")
 }
-```
 
-```{r}
 # Step 7: Format for r/qtl2 and Nextflow Module 1
 # Define which metadata columns to use as covariates for QTL analysis
 covariate_columns <- c("batch", "Sex", "generation", "coat_color", "Diet")  
@@ -168,7 +204,7 @@ covariate_columns <- c("batch", "Sex", "generation", "coat_color", "Diet")
 required_covars <- c("Sex", "generation")
 missing_required <- setdiff(required_covars, covariate_columns)
 if(length(missing_required) > 0) {
- cat("WARNING: Missing required covariates for r/qtl2:", paste(missing_required, collapse = ", "), "\n")
+  cat("WARNING: Missing required covariates for r/qtl2:", paste(missing_required, collapse = ", "), "\n")
 }
 
 # Calculate dimensions
@@ -182,8 +218,8 @@ cat("- Phenotypes (transcripts):", n_phenotypes, "\n")
 
 # Select and reorder columns: covariates first, then all phenotypes
 final_data <- Combined_data %>%
- select(all_of(covariate_columns), colnames(Phenotypes_matched)) %>%
- rownames_to_column("SampleID")
+  select(all_of(covariate_columns), colnames(Phenotypes_matched)) %>%
+  rownames_to_column("SampleID")
 
 # Create properly formatted rows for r/qtl2 CSV structure
 # Row 1: Header indicators showing where covariates and phenotypes begin
@@ -200,22 +236,20 @@ mode(data_matrix) <- "character"
 all_rows <- rbind(row1, row2, data_matrix)
 
 # Write the formatted CSV file
-write.table(all_rows, "formatted_phenotypes_for_nextflow.csv", 
-           sep = ",", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(all_rows, "Data/QTL2_NF_geno_pheno_input.csv", 
+            sep = ",", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 cat("Created formatted file for Nextflow Module 1\n")
-cat("File: formatted_phenotypes_for_nextflow.csv\n")
+cat("File: QTL2_NF_geno_pheno_input.csv\n")
 cat("Dimensions: ", nrow(all_rows), " rows x ", ncol(all_rows), " columns\n")
 
 # Verify file structure
-check <- read.csv("formatted_phenotypes_for_nextflow.csv", nrows = 3, header = FALSE, stringsAsFactors = FALSE)
+check <- read.csv("Data/QTL2_NF_geno_pheno_input.csv", nrows = 3, header = FALSE, stringsAsFactors = FALSE)
 cat("File verification - first 3 rows, first 8 columns:\n")
 print(check[1:3, 1:8])
 
 cat("\nReady for Nextflow command:\n")
-cat("nextflow run main.nf --phenotype_file formatted_phenotypes_for_nextflow.csv --prefix DOchln\n")
+cat("nextflow run main.nf --phenotype_file QTL2_NF_geno_pheno_input.csv --prefix DOchln\n")
 ```
 
-QTL2_NF Module 1 input metadata/phenotype CSV is now ready to rock
-
-# 2. Download MUGA reference files
+# QTL2_NF Module 1 input metadata/phenotype CSV is now ready to rock
