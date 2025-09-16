@@ -104,10 +104,10 @@ process GENOTYPE_PROCESS {
     
     validation_log <- c(validation_log, paste("✓ Loaded allele codes:", nrow(allele_codes), "markers"))
     
-    # Test mode: filter allele codes to chromosome 19 only BEFORE merging
+    # Test mode: filter allele codes to chromosome 2 only BEFORE merging
     if ("${params.test_mode}" == "true") {
-        allele_codes <- allele_codes[allele_codes\$chr == "19", ]
-        validation_log <- c(validation_log, "⚠ TEST MODE: Filtered allele codes to chromosome 19 only")
+        allele_codes <- allele_codes[allele_codes\$chr == "2", ]
+        validation_log <- c(validation_log, "⚠ TEST MODE: Filtered allele codes to chromosome 2 only")
         validation_log <- c(validation_log, paste("  Reduced to", nrow(allele_codes), "markers for processing"))
     }
     
@@ -176,15 +176,15 @@ process GENOTYPE_PROCESS {
     
     validation_log <- c(validation_log, "✓ Successfully identified required columns")
     
-    # Test mode: filter FinalReport data to only chromosome 19 markers BEFORE merging
+    # Test mode: filter FinalReport data to only chromosome 2 markers BEFORE merging
     if ("${params.test_mode}" == "true") {
-        # Get list of chromosome 19 markers from allele codes
-        chr_19_markers <- allele_codes[allele_codes\$chr == "19", "marker"]
+        # Get list of chromosome 2 markers from allele codes
+        chr_2_markers <- allele_codes[allele_codes\$chr == "2", "marker"]
         
         # Filter FinalReport data to only these markers
-        geno_data <- geno_data[geno_data[[snp_col]] %in% chr_19_markers, ]
+        geno_data <- geno_data[geno_data[[snp_col]] %in% chr_2_markers, ]
         
-        validation_log <- c(validation_log, paste("⚠ TEST MODE: Filtered FinalReport to", nrow(geno_data), "genotype calls for chromosome 19"))
+        validation_log <- c(validation_log, paste("⚠ TEST MODE: Filtered FinalReport to", nrow(geno_data), "genotype calls for chromosome 2"))
     }
     
     # Get unique samples and SNPs

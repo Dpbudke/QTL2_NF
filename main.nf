@@ -26,10 +26,19 @@ def helpMessage() {
         --study_prefix       Study identifier prefix for output files
     
     Optional Arguments:
-        --finalreport_file  Path to GeneSeek FinalReport file
+        --finalreport_file  Path to GeneSeek FinalReport file (enables full QTL pipeline)
         --outdir            Output directory [default: results]
         --auto_prefix_samples    Automatically prefix sample IDs [default: false]
-        --test_mode         Process chromosome 19 only (for development) [default: false]
+        --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
+        --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
+        --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
+    
+    Pipeline Modules:
+        Module 1: Phenotype processing and validation
+        Module 2: Genotype processing (requires --finalreport_file)
+        Module 3: Control file generation and cross2 object creation
+        Module 4: Genome scanning and permutation testing (1000 permutations)
+        Module 5: QTL Viewer data preparation and Docker deployment
     
     Example:
         nextflow run main.nf \\
@@ -40,7 +49,7 @@ def helpMessage() {
     
     Profiles:
         -profile standard   Local execution with Docker (default)
-        -profile test       Run with test data (chr 19 only)
+        -profile test       Run with test data (chr 2 only)
         -profile docker     Explicit Docker profile
     
     """.stripIndent()
@@ -86,10 +95,9 @@ if (!phenotype_input.exists()) {
 
 include { PHENOTYPE_PROCESS } from './modules/phenotype_process.nf'
 include { GENOTYPE_PROCESS  } from './modules/genotype_process.nf'
-
-// Future module imports (commented for now)
-// include { CREATE_CROSS      } from './modules/create_cross.nf'
-// include { QTL_SCAN          } from './modules/qtl_scan.nf'
+include { GENERATE_CONTROL_FILE; CREATE_CROSS2_OBJECT } from './modules/control_cross2.nf'
+include { PREPARE_GENOME_SCAN; GENOME_SCAN; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
+include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/qtl_viewer.nf'
 
 /*
 ========================================================================================
@@ -106,7 +114,8 @@ workflow {
     phenotype_file : ${params.phenotype_file}
     study_prefix   : ${params.study_prefix}
     outdir         : ${params.outdir}
-    test_mode      : ${params.test_mode ? 'true (chr 19 only)' : 'false'}
+    test_mode      : ${params.test_mode ? 'true (chr 2 only)' : 'false'}
+    lod_threshold  : ${params.lod_threshold}
     ========================================
     """.stripIndent()
 
@@ -117,7 +126,8 @@ workflow {
     // MODULE 1: Phenotype Processing
     PHENOTYPE_PROCESS(
         ch_phenotype_file,
-        ch_study_prefix
+        ch_study_prefix,
+        Channel.value(params.sample_filter ?: "null")
     )
     
     // MODULE 2: Genotype Processing (if FinalReport file provided)
@@ -129,10 +139,99 @@ workflow {
             ch_study_prefix
         )
         
+        // MODULE 3: Control File and Cross2 Object Creation
+        GENERATE_CONTROL_FILE(
+            PHENOTYPE_PROCESS.out.pheno,
+            PHENOTYPE_PROCESS.out.covar,
+            GENOTYPE_PROCESS.out.geno_files.collect(),
+            GENOTYPE_PROCESS.out.allele_codes,
+            ch_study_prefix
+        )
+        
+        CREATE_CROSS2_OBJECT(
+            GENERATE_CONTROL_FILE.out.control_file,
+            GENERATE_CONTROL_FILE.out.founder_genos.mix(
+                GENERATE_CONTROL_FILE.out.genetic_maps,
+                GENERATE_CONTROL_FILE.out.physical_maps,
+                PHENOTYPE_PROCESS.out.pheno,
+                PHENOTYPE_PROCESS.out.covar,
+                GENOTYPE_PROCESS.out.geno_files
+            ).collect(),
+            ch_study_prefix
+        )
+        
         // Display results for Module 2
         GENOTYPE_PROCESS.out.geno_files.view { "Genotype files created: $it" }
         GENOTYPE_PROCESS.out.validation_report.view { "Genotype validation report: $it" }
         GENOTYPE_PROCESS.out.allele_codes.view { "Reference allele codes downloaded: $it" }
+        
+        // Display results for Module 3
+        GENERATE_CONTROL_FILE.out.control_file.view { "Control file created: $it" }
+        CREATE_CROSS2_OBJECT.out.cross2_object.view { "Cross2 object created: $it" }
+        CREATE_CROSS2_OBJECT.out.validation_report.view { "Cross2 validation report: $it" }
+        
+        // MODULE 4: Genome Scanning and Permutation Testing
+        PREPARE_GENOME_SCAN(
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            ch_study_prefix
+        )
+        
+        GENOME_SCAN(
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            PREPARE_GENOME_SCAN.out.genoprob,
+            PREPARE_GENOME_SCAN.out.kinship,
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+        
+        PERMUTATION_TEST(
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            PREPARE_GENOME_SCAN.out.genoprob,
+            PREPARE_GENOME_SCAN.out.kinship,
+            GENOME_SCAN.out.filtered_phenotypes,
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+        
+        IDENTIFY_SIGNIFICANT_QTLS(
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            GENOME_SCAN.out.scan_results,
+            PERMUTATION_TEST.out.perm_results,
+            PERMUTATION_TEST.out.thresholds,
+            ch_study_prefix
+        )
+
+        // MODULE 5: QTL Viewer Integration
+        PREPARE_QTLVIEWER_DATA(
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            PREPARE_GENOME_SCAN.out.genoprob,
+            PREPARE_GENOME_SCAN.out.kinship,
+            PREPARE_GENOME_SCAN.out.genetic_map,
+            GENOME_SCAN.out.scan_results,
+            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            ch_study_prefix
+        )
+
+        SETUP_QTLVIEWER_DEPLOYMENT(
+            PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
+            ch_study_prefix
+        )
+
+        // Display results for Module 4
+        PREPARE_GENOME_SCAN.out.validation_report.view { "Genome scan preparation report: $it" }
+        GENOME_SCAN.out.validation_report.view { "Genome scan report: $it" }
+        GENOME_SCAN.out.peaks.view { "Preliminary peaks found: $it" }
+        PERMUTATION_TEST.out.validation_report.view { "Permutation test report: $it" }
+        PERMUTATION_TEST.out.thresholds.view { "Significance thresholds: $it" }
+        IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
+        IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
+
+        // Display results for Module 5
+        PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
+        SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
+        SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
+        SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+        
     } else {
         log.info "Skipping genotype processing - no FinalReport file specified"
         log.info "To include genotype processing, add: --finalreport_file Data/YourFinalReport.txt"
@@ -142,20 +241,6 @@ workflow {
     PHENOTYPE_PROCESS.out.covar.view { "Covariate file created: $it" }
     PHENOTYPE_PROCESS.out.pheno.view { "Phenotype file created: $it" }
     PHENOTYPE_PROCESS.out.validation_report.view { "Validation report: $it" }
-    
-    // Future workflow steps (commented for now)
-    /*
-    // MODULE 3: Create Cross Object (future)
-    // CREATE_CROSS(
-    //     PHENOTYPE_PROCESS.out.pheno,
-    //     PHENOTYPE_PROCESS.out.covar,
-    //     GENOTYPE_PROCESS.out.geno_files,
-    //     GENOTYPE_PROCESS.out.allele_codes
-    // )
-    
-    // MODULE 4: QTL Scanning (future)
-    // QTL_SCAN(CREATE_CROSS.out.cross_object)
-    */
 }
 
 /*
@@ -173,7 +258,7 @@ workflow.onComplete {
     Time     : ${workflow.duration}
     Workdir  : ${workflow.workDir}
     Results  : ${params.outdir}
-    Test Mode: ${params.test_mode ? 'Enabled (chr 19 only)' : 'Disabled'}
+    Test Mode: ${params.test_mode ? 'Enabled (chr 2 only)' : 'Disabled'}
     ========================================
     """.stripIndent()
     
