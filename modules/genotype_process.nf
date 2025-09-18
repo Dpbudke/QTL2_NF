@@ -4,6 +4,7 @@ process GENOTYPE_PROCESS {
     
     input:
     path(finalreport_file)
+    path(valid_samples_file)
     val(prefix)
     
     output:
@@ -31,6 +32,18 @@ process GENOTYPE_PROCESS {
     validation_log <- c(validation_log, paste("Timestamp:", Sys.time()))
     validation_log <- c(validation_log, paste("Study Prefix:", "${prefix}"))
     validation_log <- c(validation_log, paste("FinalReport File:", "${finalreport_file}"))
+    validation_log <- c(validation_log, paste("Valid Samples File:", "${valid_samples_file}"))
+    validation_log <- c(validation_log, "")
+
+    # Read valid sample list from Module 1
+    if (!file.exists("${valid_samples_file}")) {
+        stop("Valid samples file not found: ${valid_samples_file}")
+    }
+
+    valid_samples <- readLines("${valid_samples_file}")
+    validation_log <- c(validation_log, "=== Sample Intersection Logic ===")
+    validation_log <- c(validation_log, paste("✓ Loaded valid sample list:", length(valid_samples), "samples"))
+    validation_log <- c(validation_log, paste("✓ Sample filtering will be applied to FinalReport data"))
     validation_log <- c(validation_log, "")
     
     # Download GigaMUGA reference files (build 39)
@@ -129,26 +142,76 @@ process GENOTYPE_PROCESS {
         validation_log <- c(validation_log, paste("✓ Found [Data] section at line", data_start-1))
     }
     
-    # Read FinalReport data using data.table for memory efficiency
-    cat("Reading FinalReport data...\\n")
-    geno_data <- tryCatch({
-        if (data_start > 1) {
-            fread("${finalreport_file}", 
-                  skip = data_start - 1,
-                  header = TRUE,
-                  sep = "\\t",
-                  stringsAsFactors = FALSE,
-                  data.table = FALSE)
-        } else {
-            fread("${finalreport_file}", 
-                  header = TRUE,
-                  sep = "\\t", 
-                  stringsAsFactors = FALSE,
-                  data.table = FALSE)
+    # Read FinalReport data using chunk-based approach for large files
+    cat("Reading FinalReport data in chunks...\\n")
+
+    # First, determine total number of lines to process
+    total_lines <- as.numeric(system(paste("wc -l <", "${finalreport_file}"), intern = TRUE))
+    data_lines <- total_lines - data_start + 1
+
+    validation_log <- c(validation_log, paste("Total lines in file:", total_lines))
+    validation_log <- c(validation_log, paste("Data lines to process:", data_lines))
+
+    # Define chunk size (process 1M rows at a time to manage memory)
+    chunk_size <- 1000000
+    total_chunks <- ceiling(data_lines / chunk_size)
+
+    validation_log <- c(validation_log, paste("Processing in", total_chunks, "chunks of", chunk_size, "rows each"))
+
+    # Initialize combined data frame
+    geno_data <- data.frame()
+
+    # Process file in chunks
+    for (chunk_num in 1:total_chunks) {
+        cat("Processing chunk", chunk_num, "of", total_chunks, "...\\n")
+
+        # Calculate skip and nrows for this chunk
+        chunk_skip <- data_start - 1 + (chunk_num - 1) * chunk_size
+        chunk_nrows <- min(chunk_size, data_lines - (chunk_num - 1) * chunk_size)
+
+        # Read this chunk
+        chunk_data <- tryCatch({
+            if (chunk_num == 1) {
+                # First chunk includes header
+                fread("${finalreport_file}",
+                      skip = data_start - 1,
+                      nrows = chunk_nrows,
+                      header = TRUE,
+                      sep = "\\t",
+                      stringsAsFactors = FALSE,
+                      data.table = FALSE)
+            } else {
+                # Subsequent chunks without header
+                fread("${finalreport_file}",
+                      skip = chunk_skip,
+                      nrows = chunk_nrows,
+                      header = FALSE,
+                      sep = "\\t",
+                      stringsAsFactors = FALSE,
+                      data.table = FALSE)
+            }
+        }, error = function(e) {
+            stop("Error reading chunk ", chunk_num, ": ", e\$message)
+        })
+
+        # For chunks after the first, assign column names from first chunk
+        if (chunk_num > 1 && nrow(chunk_data) > 0) {
+            colnames(chunk_data) <- colnames(geno_data)
         }
-    }, error = function(e) {
-        stop("Error reading FinalReport data: ", e\$message)
-    })
+
+        # Combine with main data frame
+        if (nrow(chunk_data) > 0) {
+            geno_data <- rbind(geno_data, chunk_data)
+        }
+
+        # Clean up chunk data to free memory
+        rm(chunk_data)
+        gc(verbose = FALSE)
+
+        cat("Chunk", chunk_num, "completed. Total rows so far:", nrow(geno_data), "\\n")
+    }
+
+    cat("Finished reading all chunks. Total rows:", nrow(geno_data), "\\n")
     
     validation_log <- c(validation_log, paste("✓ Successfully read FinalReport data"))
     validation_log <- c(validation_log, paste("  - Dimensions:", nrow(geno_data), "rows x", ncol(geno_data), "columns"))
@@ -175,7 +238,27 @@ process GENOTYPE_PROCESS {
     }
     
     validation_log <- c(validation_log, "✓ Successfully identified required columns")
-    
+
+    # Apply sample intersection filtering BEFORE any other processing
+    original_samples <- unique(geno_data[[sample_col]])
+    validation_log <- c(validation_log, paste("✓ FinalReport contains", length(original_samples), "unique samples"))
+
+    # Filter FinalReport data to only valid samples from Module 1
+    geno_data <- geno_data[geno_data[[sample_col]] %in% valid_samples, ]
+
+    filtered_samples <- unique(geno_data[[sample_col]])
+    samples_removed <- length(original_samples) - length(filtered_samples)
+
+    validation_log <- c(validation_log, paste("✓ Applied sample intersection filtering"))
+    validation_log <- c(validation_log, paste("  - Original samples in FinalReport:", length(original_samples)))
+    validation_log <- c(validation_log, paste("  - Valid samples from phenotype file:", length(valid_samples)))
+    validation_log <- c(validation_log, paste("  - Samples after filtering:", length(filtered_samples)))
+    validation_log <- c(validation_log, paste("  - Samples removed:", samples_removed))
+
+    if (length(filtered_samples) == 0) {
+        stop("No samples remain after intersection filtering! Check sample ID consistency between phenotype and genotype files.")
+    }
+
     # Test mode: filter FinalReport data to only chromosome 2 markers BEFORE merging
     if ("${params.test_mode}" == "true") {
         # Get list of chromosome 2 markers from allele codes
@@ -270,15 +353,44 @@ process GENOTYPE_PROCESS {
         # Get unique markers and samples for this chromosome
         chr_markers <- unique(chr_data[[snp_col]])
         chr_samples <- unique(chr_data[[sample_col]])
-        
+
+        # Ensure chr_samples are sorted for consistent indexing
+        chr_samples <- sort(chr_samples)
+
         # Create matrix like DO_pipe (handles duplicates by overwriting)
         geno_matrix <- matrix(nrow = length(chr_markers), ncol = length(chr_samples))
         dimnames(geno_matrix) <- list(chr_markers, chr_samples)
+
+        # Debug: Print matrix column names vs sample IDs
+        cat("DEBUG: Matrix columns created:", length(colnames(geno_matrix)), "\\n")
+        cat("DEBUG: First few matrix columns:", head(colnames(geno_matrix), 5), "\\n")
+        cat("DEBUG: chr_samples to iterate:", length(chr_samples), "\\n")
+
+        # Validation: ensure matrix dimensions match data
+        cat("DEBUG: Chromosome", chr, "- Matrix:", nrow(geno_matrix), "x", ncol(geno_matrix), "\\n")
+        cat("DEBUG: Chromosome", chr, "- chr_samples length:", length(chr_samples), "\\n")
         
-        # Fill matrix - this handles duplicates by overwriting like DO_pipe
+        # Fill matrix using DO_pipe approach - simple numeric indexing
         for (i in seq_along(chr_samples)) {
-            sample_data <- chr_data[chr_data[[sample_col]] == chr_samples[i], ]
-            geno_matrix[sample_data[[snp_col]], i] <- sample_data\$qtl2_call
+            sample_id <- chr_samples[i]
+
+            # Get sample data rows (DO_pipe style: wh <- (g[,"Sample ID"]==samples[i]))
+            sample_rows <- chr_data[[sample_col]] == sample_id
+
+            if (any(sample_rows)) {
+                cat("DEBUG: Processing sample", i, "of", length(chr_samples), "- Sample ID:", sample_id, "\\n")
+
+                # DO_pipe style: geno[g[wh,"SNP Name"],i] <- paste0(g[wh,"Allele1"], g[wh,"Allele2"])
+                snp_names <- chr_data[[snp_col]][sample_rows]
+                qtl2_calls <- chr_data\$qtl2_call[sample_rows]
+
+                # Only assign SNPs that exist in the matrix rows
+                valid_snps <- snp_names %in% rownames(geno_matrix)
+                if (any(valid_snps)) {
+                    geno_matrix[snp_names[valid_snps], i] <- qtl2_calls[valid_snps]
+                    cat("DEBUG: Assigned", sum(valid_snps), "SNPs to column", i, "\\n")
+                }
+            }
         }
         
         # Replace NAs with "-"

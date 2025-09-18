@@ -34,6 +34,12 @@
 - Handle missing data properly (encode as - not NA)
 - Validate genotype encoding integrity
 
+**Recent Bug Fix (2025-09-17):**
+- Fixed matrix indexing error in chromosome-specific file generation
+- Error: `subscript out of bounds` when assigning genotype calls to matrix
+- Solution: Use sample ID instead of index position for matrix column assignment
+- Impact: Module 2 processing now completes successfully for large datasets
+
 ## Module 3: Control File Generation & Cross2 Creation (control_cross2.nf)
 **Purpose:** Create r/qtl2 control file and generate cross2 object
 
@@ -172,6 +178,47 @@ cd ~/my_qtl_study/09_qtl_viewer_data/
 ```
 
 **Result**: Interactive QTL Viewer accessible at `http://localhost:8000` with complete study data
+
+## Additional Module: DO Sample Mixup QC Tool (modules/do_mixup_qc.nf)
+**Purpose:** Standalone quality control tool for detecting sample mix-ups in Diversity Outbred (DO) mouse data
+
+Based on methodology from [Broman et al. (2015) G3](https://doi.org/10.1534/g3.115.019778), this tool uses expression QTL (eQTL) data to detect potential sample mix-ups by comparing observed gene expression to predicted expression from genotype data.
+
+**Key Features:**
+- **eQTL Selection**: Identifies top 100 expression traits with strongest genetic effects
+- **Expression Prediction**: Calculates predicted expression from genotype probabilities at eQTL peaks
+- **Distance Calculation**: Measures RMS distance between observed and predicted expression
+- **Problem Detection**: Identifies samples where self-distance > optimal distance
+
+**Usage Examples:**
+```bash
+# Standalone mode
+nextflow run modules/do_mixup_qc.nf \
+  --phenotype_file results/01_phenotype_processing/MyStudy_pheno.csv \
+  --cross2_object results/03_control_files/MyStudy_cross2_object.RData \
+  --qtl_results results/04_qtl_analysis/MyStudy_qtl_peaks.csv \
+  --study_prefix MyStudy \
+  -profile standard
+
+# Integrated with main pipeline
+nextflow run main.nf \
+  --phenotype_file Data/expression_data.csv \
+  --finalreport_file Data/FinalReport.txt \
+  --study_prefix MyStudy \
+  --run_mixup_qc true \
+  -profile standard
+```
+
+**Outputs:**
+- Interactive HTML report with visualizations
+- Detailed table of problematic samples
+- Suggested sample label corrections
+- Full distance matrix and analysis summary
+
+**Requirements:**
+- High-dimensional expression datasets (>1000 traits recommended)
+- Strong eQTLs (≥10 traits with LOD > 3)
+- Common samples (≥10 with both expression and genotype data)
 
 To Add:
 - explain users need to upload data into Data/ (pheno csv, FinalReport.txt, ect)

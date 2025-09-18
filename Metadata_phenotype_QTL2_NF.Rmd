@@ -236,20 +236,20 @@ mode(data_matrix) <- "character"
 all_rows <- rbind(row1, row2, data_matrix)
 
 # Write the formatted CSV file
-write.table(all_rows, "Data/QTL2_NF_geno_pheno_input.csv", 
+write.table(all_rows, "Data/QTL2_NF_meta_pheno_input.csv", 
             sep = ",", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 cat("Created formatted file for Nextflow Module 1\n")
-cat("File: QTL2_NF_geno_pheno_input.csv\n")
+cat("File: QTL2_NF_meta_pheno_input.csv\n")
 cat("Dimensions: ", nrow(all_rows), " rows x ", ncol(all_rows), " columns\n")
 
 # Verify file structure
-check <- read.csv("Data/QTL2_NF_geno_pheno_input.csv", nrows = 3, header = FALSE, stringsAsFactors = FALSE)
+check <- read.csv("Data/QTL2_NF_meta_pheno_input.csv", nrows = 3, header = FALSE, stringsAsFactors = FALSE)
 cat("File verification - first 3 rows, first 8 columns:\n")
 print(check[1:3, 1:8])
 
 cat("\nReady for Nextflow command:\n")
-cat("nextflow run main.nf --phenotype_file QTL2_NF_geno_pheno_input.csv --prefix DOchln\n")
+cat("nextflow run main.nf --phenotype_file QTL2_NF_meta_pheno_input.csv --prefix DOchln\n")
 ```
 
 # QTL2_NF Module 1 input metadata/phenotype CSV is now ready to rock

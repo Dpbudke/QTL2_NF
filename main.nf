@@ -136,6 +136,7 @@ workflow {
         
         GENOTYPE_PROCESS(
             ch_finalreport,
+            PHENOTYPE_PROCESS.out.valid_samples,
             ch_study_prefix
         )
         
