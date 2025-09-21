@@ -4,6 +4,8 @@ test_results/
 nextflow_work/
 singularity_cache/
 .nextflow/
+.nextflow.log*
+.nextflow.log
 .claude/
 CLAUDE.md
 results

@@ -1,214 +1,117 @@
-Sep-18 14:59:59.187 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf --phenotype_file Data/QTL2_NF_meta_pheno_input.csv --finalreport_file Data/FinalReport.txt --study_prefix MemoryFixTest --test_mode -profile standard
-Sep-18 14:59:59.313 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 25.04.6
-Sep-18 14:59:59.371 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/dawson.budke/.nextflow/plugins; core-plugins: nf-amazon@2.15.0,nf-azure@1.16.0,nf-cloudcache@0.4.3,nf-codecommit@0.2.3,nf-console@1.2.1,nf-google@1.21.1,nf-k8s@1.0.0,nf-tower@1.11.4,nf-wave@1.12.1
-Sep-18 14:59:59.445 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
-Sep-18 14:59:59.447 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
-Sep-18 14:59:59.453 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
-Sep-18 14:59:59.471 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
-Sep-18 14:59:59.502 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /project/do2_projects/DO_Choline/QTL2_NF/nextflow.config
-Sep-18 14:59:59.506 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /project/do2_projects/DO_Choline/QTL2_NF/nextflow.config
-Sep-18 14:59:59.572 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/dawson.budke/.nextflow/secrets/store.json
-Sep-18 14:59:59.577 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@2687f956] - activable => nextflow.secret.LocalSecretsProvider@2687f956
-Sep-18 14:59:59.627 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
-Sep-18 15:00:00.450 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
-Sep-18 15:00:00.476 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [kickass_knuth] DSL2 - revision: 4e9b7db1af
-Sep-18 15:00:00.478 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
-Sep-18 15:00:00.483 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
-Sep-18 15:00:00.549 [main] DEBUG nextflow.Session - Session UUID: 6ac58972-652b-419f-a18d-cb33cf0c47b3
-Sep-18 15:00:00.549 [main] DEBUG nextflow.Session - Run name: kickass_knuth
-Sep-18 15:00:00.551 [main] DEBUG nextflow.Session - Executor pool size: 4
-Sep-18 15:00:00.562 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
-Sep-18 15:00:00.568 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=12; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
-Sep-18 15:00:00.725 [main] DEBUG nextflow.cli.CmdRun - 
+Sep-21 16:32:09.340 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main_resume.nf --resume_from genome_scan --study_prefix DOchln -profile standard
+Sep-21 16:32:09.661 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 25.04.6
+Sep-21 16:32:09.683 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/dawson.budke/.nextflow/plugins; core-plugins: nf-amazon@2.15.0,nf-azure@1.16.0,nf-cloudcache@0.4.3,nf-codecommit@0.2.3,nf-console@1.2.1,nf-google@1.21.1,nf-k8s@1.0.0,nf-tower@1.11.4,nf-wave@1.12.1
+Sep-21 16:32:09.717 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Sep-21 16:32:09.719 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Sep-21 16:32:09.728 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Sep-21 16:32:09.742 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Sep-21 16:32:09.788 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /project/do2_projects/DO_Choline/QTL2_NF/nextflow.config
+Sep-21 16:32:09.791 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /project/do2_projects/DO_Choline/QTL2_NF/nextflow.config
+Sep-21 16:32:09.825 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/dawson.budke/.nextflow/secrets/store.json
+Sep-21 16:32:09.830 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@5f14a673] - activable => nextflow.secret.LocalSecretsProvider@5f14a673
+Sep-21 16:32:09.847 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+Sep-21 16:32:10.598 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
+Sep-21 16:32:10.625 [main] DEBUG nextflow.cli.CmdRun - Launching `main_resume.nf` [cheesy_morse] DSL2 - revision: 0d716a45e6
+Sep-21 16:32:10.626 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+Sep-21 16:32:10.629 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+Sep-21 16:32:10.700 [main] DEBUG nextflow.Session - Session UUID: 338f5c1e-c31b-44a6-9c91-752af73f22e0
+Sep-21 16:32:10.701 [main] DEBUG nextflow.Session - Run name: cheesy_morse
+Sep-21 16:32:10.702 [main] DEBUG nextflow.Session - Executor pool size: 4
+Sep-21 16:32:10.714 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+Sep-21 16:32:10.721 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=12; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Sep-21 16:32:10.761 [main] DEBUG nextflow.cli.CmdRun - 
   Version: 25.04.6 build 5954
   Created: 01-07-2025 11:27 UTC (06:27 CDT)
-  System: Linux 5.14.0-503.40.1.el9_5.x86_64
+  System: Linux 5.14.0-570.44.1.el9_6.x86_64
   Runtime: Groovy 4.0.26 on OpenJDK 64-Bit Server VM 21.0.7+6-LTS
   Encoding: UTF-8 (UTF-8)
-  Process: 283222@ceres20-compute-16.ceres.scinet.usda.gov [10.1.10.110]
-  CPUs: 4 - Mem: 754 GB (716.2 GB) - Swap: 4 GB (4 GB)
-Sep-18 15:00:00.915 [main] DEBUG nextflow.Session - Work-dir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work [nfs]
-Sep-18 15:00:00.949 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
-Sep-18 15:00:00.960 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
-Sep-18 15:00:01.034 [main] DEBUG nextflow.Session - Observer factory (v2): LinObserverFactory
-Sep-18 15:00:01.072 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
-Sep-18 15:00:01.082 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 5; maxThreads: 1000
-Sep-18 15:00:01.364 [main] DEBUG nextflow.Session - Session start
-Sep-18 15:00:01.374 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow started -- trace file: /project/do2_projects/DO_Choline/QTL2_NF/results/pipeline_info/execution_trace.txt
-Sep-18 15:00:01.911 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
-Sep-18 15:00:02.826 [main] INFO  nextflow.Nextflow - 
+  Process: 205744@ceres20-compute-40.ceres.scinet.usda.gov [10.1.9.223]
+  CPUs: 4 - Mem: 754 GB (721.4 GB) - Swap: 4 GB (4 GB)
+Sep-21 16:32:10.834 [main] DEBUG nextflow.Session - Work-dir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work [nfs]
+Sep-21 16:32:10.860 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+Sep-21 16:32:10.896 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+Sep-21 16:32:10.929 [main] DEBUG nextflow.Session - Observer factory (v2): LinObserverFactory
+Sep-21 16:32:10.966 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+Sep-21 16:32:10.987 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 5; maxThreads: 1000
+Sep-21 16:32:11.249 [main] DEBUG nextflow.Session - Session start
+Sep-21 16:32:11.253 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow started -- trace file: /project/do2_projects/DO_Choline/QTL2_NF/results/pipeline_info/execution_trace.txt
+Sep-21 16:32:12.014 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+Sep-21 16:32:13.005 [main] INFO  nextflow.Nextflow - 
 ========================================
  QTL2_NF Pipeline Started
 ========================================
-phenotype_file : Data/QTL2_NF_meta_pheno_input.csv
-study_prefix   : MemoryFixTest
+study_prefix   : DOchln
 outdir         : results
-test_mode      : true (chr 2 only)
+resume_from    : genome_scan
 lod_threshold  : 7.0
 ========================================
 
-Sep-18 15:00:02.916 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PHENOTYPE_PROCESS` matches process PHENOTYPE_PROCESS
-Sep-18 15:00:02.929 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:02.929 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:02.938 [main] DEBUG nextflow.executor.Executor - [warm up] executor > slurm
-Sep-18 15:00:02.946 [main] DEBUG n.processor.TaskPollingMonitor - Creating task monitor for executor 'slurm' > capacity: 100; pollInterval: 5s; dumpInterval: 5m 
-Sep-18 15:00:02.948 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: slurm)
-Sep-18 15:00:02.950 [main] DEBUG n.executor.AbstractGridExecutor - Creating executor 'slurm' > queue-stat-interval: 1m
-Sep-18 15:00:02.973 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PHENOTYPE_PROCESS': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.017 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:GENOTYPE_PROCESS` matches process GENOTYPE_PROCESS
-Sep-18 15:00:03.019 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.020 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.024 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GENOTYPE_PROCESS': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.057 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.058 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.060 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GENERATE_CONTROL_FILE': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.080 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.080 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.086 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'CREATE_CROSS2_OBJECT': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.105 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PREPARE_GENOME_SCAN` matches process PREPARE_GENOME_SCAN
-Sep-18 15:00:03.107 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.107 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.110 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PREPARE_GENOME_SCAN': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.119 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:GENOME_SCAN` matches process GENOME_SCAN
-Sep-18 15:00:03.120 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.121 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.122 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GENOME_SCAN': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.136 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PERMUTATION_TEST` matches process PERMUTATION_TEST
-Sep-18 15:00:03.138 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.138 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.140 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PERMUTATION_TEST': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.151 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:IDENTIFY_SIGNIFICANT_QTLS` matches process IDENTIFY_SIGNIFICANT_QTLS
-Sep-18 15:00:03.154 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.155 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.159 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'IDENTIFY_SIGNIFICANT_QTLS': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.176 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.176 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.180 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PREPARE_QTLVIEWER_DATA': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.204 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
-Sep-18 15:00:03.204 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
-Sep-18 15:00:03.208 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'SETUP_QTLVIEWER_DEPLOYMENT': maxForks=0; fair=false; array=0
-Sep-18 15:00:03.234 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: PERMUTATION_TEST, PHENOTYPE_PROCESS, PREPARE_QTLVIEWER_DATA, GENERATE_CONTROL_FILE, IDENTIFY_SIGNIFICANT_QTLS, PREPARE_GENOME_SCAN, GENOME_SCAN, CREATE_CROSS2_OBJECT, GENOTYPE_PROCESS, SETUP_QTLVIEWER_DEPLOYMENT
-Sep-18 15:00:03.247 [main] WARN  nextflow.Session - There's no process matching config selector: DO_MIXUP_QC
-Sep-18 15:00:03.327 [main] DEBUG nextflow.Session - Igniting dataflow network (16)
-Sep-18 15:00:03.337 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PHENOTYPE_PROCESS
-Sep-18 15:00:03.337 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GENOTYPE_PROCESS
-Sep-18 15:00:03.338 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GENERATE_CONTROL_FILE
-Sep-18 15:00:03.340 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > CREATE_CROSS2_OBJECT
-Sep-18 15:00:03.340 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PREPARE_GENOME_SCAN
-Sep-18 15:00:03.340 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GENOME_SCAN
-Sep-18 15:00:03.341 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PERMUTATION_TEST
-Sep-18 15:00:03.353 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > IDENTIFY_SIGNIFICANT_QTLS
-Sep-18 15:00:03.353 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PREPARE_QTLVIEWER_DATA
-Sep-18 15:00:03.354 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > SETUP_QTLVIEWER_DEPLOYMENT
-Sep-18 15:00:03.354 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
-  Script_b3a16ce7d801d609: /project/do2_projects/DO_Choline/QTL2_NF/main.nf
-  Script_981606365b726e45: /project/do2_projects/DO_Choline/QTL2_NF/modules/control_cross2.nf
+Sep-21 16:32:13.027 [main] INFO  nextflow.Nextflow - Skipping PHENOTYPE_PROCESS - loading from existing files
+Sep-21 16:32:13.057 [main] INFO  nextflow.Nextflow - Skipping GENERATE_CONTROL_FILE - loading from existing files
+Sep-21 16:32:13.104 [main] INFO  nextflow.Nextflow - Skipping CREATE_CROSS2_OBJECT - loading from existing files
+Sep-21 16:32:13.107 [main] INFO  nextflow.Nextflow - Skipping PREPARE_GENOME_SCAN - loading from existing files
+Sep-21 16:32:13.113 [main] INFO  nextflow.Nextflow - Running GENOME_SCAN with optimized memory settings
+Sep-21 16:32:13.198 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:GENOME_SCAN` matches process GENOME_SCAN
+Sep-21 16:32:13.210 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
+Sep-21 16:32:13.212 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
+Sep-21 16:32:13.237 [main] DEBUG nextflow.executor.Executor - [warm up] executor > slurm
+Sep-21 16:32:13.247 [main] DEBUG n.processor.TaskPollingMonitor - Creating task monitor for executor 'slurm' > capacity: 100; pollInterval: 5s; dumpInterval: 5m 
+Sep-21 16:32:13.249 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: slurm)
+Sep-21 16:32:13.256 [main] DEBUG n.executor.AbstractGridExecutor - Creating executor 'slurm' > queue-stat-interval: 1m
+Sep-21 16:32:13.291 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GENOME_SCAN': maxForks=0; fair=false; array=0
+Sep-21 16:32:13.340 [main] INFO  nextflow.Nextflow - Running PERMUTATION_TEST
+Sep-21 16:32:13.350 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PERMUTATION_TEST` matches process PERMUTATION_TEST
+Sep-21 16:32:13.352 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
+Sep-21 16:32:13.352 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
+Sep-21 16:32:13.355 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PERMUTATION_TEST': maxForks=0; fair=false; array=0
+Sep-21 16:32:13.370 [main] INFO  nextflow.Nextflow - Running IDENTIFY_SIGNIFICANT_QTLS
+Sep-21 16:32:13.376 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:IDENTIFY_SIGNIFICANT_QTLS` matches process IDENTIFY_SIGNIFICANT_QTLS
+Sep-21 16:32:13.378 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
+Sep-21 16:32:13.385 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
+Sep-21 16:32:13.388 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'IDENTIFY_SIGNIFICANT_QTLS': maxForks=0; fair=false; array=0
+Sep-21 16:32:13.399 [main] INFO  nextflow.Nextflow - Running QTL Viewer setup
+Sep-21 16:32:13.410 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
+Sep-21 16:32:13.410 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
+Sep-21 16:32:13.411 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'PREPARE_QTLVIEWER_DATA': maxForks=0; fair=false; array=0
+Sep-21 16:32:13.422 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: slurm
+Sep-21 16:32:13.422 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'slurm'
+Sep-21 16:32:13.427 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'SETUP_QTLVIEWER_DEPLOYMENT': maxForks=0; fair=false; array=0
+Sep-21 16:32:13.439 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: PERMUTATION_TEST, PHENOTYPE_PROCESS, PREPARE_QTLVIEWER_DATA, GENERATE_CONTROL_FILE, IDENTIFY_SIGNIFICANT_QTLS, PREPARE_GENOME_SCAN, GENOME_SCAN, CREATE_CROSS2_OBJECT, GENOTYPE_PROCESS, SETUP_QTLVIEWER_DEPLOYMENT
+Sep-21 16:32:13.452 [main] WARN  nextflow.Session - There's no process matching config selector: DO_MIXUP_QC
+Sep-21 16:32:13.455 [main] DEBUG nextflow.Session - Igniting dataflow network (19)
+Sep-21 16:32:13.463 [PathVisitor-1] DEBUG nextflow.file.PathVisitor - files for syntax: glob; folder: results/03_control_file_generation/; pattern: GM_foundergeno*.csv; options: [:]
+Sep-21 16:32:13.467 [PathVisitor-2] DEBUG nextflow.file.PathVisitor - files for syntax: glob; folder: results/03_control_file_generation/; pattern: GM_pmap*.csv; options: [:]
+Sep-21 16:32:13.469 [PathVisitor-4] DEBUG nextflow.file.PathVisitor - files for syntax: glob; folder: results/03_control_file_generation/; pattern: GM_gmap*.csv; options: [:]
+Sep-21 16:32:13.476 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GENOME_SCAN
+Sep-21 16:32:13.484 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PERMUTATION_TEST
+Sep-21 16:32:13.484 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > IDENTIFY_SIGNIFICANT_QTLS
+Sep-21 16:32:13.485 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PREPARE_QTLVIEWER_DATA
+Sep-21 16:32:13.485 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > SETUP_QTLVIEWER_DEPLOYMENT
+Sep-21 16:32:13.485 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_f76eaecfff33d78c: /project/do2_projects/DO_Choline/QTL2_NF/modules/genotype_process.nf
+  Script_e4ef92ac754bc462: /project/do2_projects/DO_Choline/QTL2_NF/main_resume.nf
+  Script_646e93cd6211fa3c: /project/do2_projects/DO_Choline/QTL2_NF/modules/control_cross2.nf
   Script_109ab0611efbbd07: /project/do2_projects/DO_Choline/QTL2_NF/modules/phenotype_process.nf
-  Script_d18e2b003a7e7a41: /project/do2_projects/DO_Choline/QTL2_NF/modules/scan_perm.nf
-  Script_949bffc559672c80: /project/do2_projects/DO_Choline/QTL2_NF/modules/genotype_process.nf
   Script_57b48137f064835a: /project/do2_projects/DO_Choline/QTL2_NF/modules/qtl_viewer.nf
-Sep-18 15:00:03.354 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
-Sep-18 15:00:03.354 [main] DEBUG nextflow.Session - Session await
-Sep-18 15:00:03.421 [Actor Thread 6] DEBUG nextflow.container.SingularityCache - Apptainer found local store for image=docker://dpbudke/qtl2-pipeline:latest; path=/project/do2_projects/DO_Choline/QTL2_NF/singularity_cache/dpbudke-qtl2-pipeline-latest.img
-Sep-18 15:00:03.671 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process PHENOTYPE_PROCESS (Processing phenotypes for MemoryFixTest) > jobId: 16418263; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/40/c4c451e10ec1afa89e8e4428ab85a9
-Sep-18 15:00:03.672 [Task submitter] INFO  nextflow.Session - [40/c4c451] Submitted process > PHENOTYPE_PROCESS (Processing phenotypes for MemoryFixTest)
-Sep-18 15:00:37.995 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418263; id: 1; name: PHENOTYPE_PROCESS (Processing phenotypes for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/40/c4c451e10ec1afa89e8e4428ab85a9 started: 1758225608037; exited: 2025-09-18T20:00:31.256512216Z; ]
-Sep-18 15:00:37.998 [Task monitor] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'TaskFinalizer' minSize=10; maxSize=12; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
-Sep-18 15:00:38.192 [TaskFinalizer-1] DEBUG nextflow.processor.TaskProcessor - Process PHENOTYPE_PROCESS > Skipping output binding because one or more optional files are missing: fileoutparam<3>
-Sep-18 15:00:38.238 [TaskFinalizer-1] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'PublishDir' minSize=10; maxSize=12; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
-Sep-18 15:00:38.414 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest) > jobId: 16418265; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119
-Sep-18 15:00:38.415 [Task submitter] INFO  nextflow.Session - [54/f941c2] Submitted process > GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest)
-Sep-18 15:03:52.986 [Task monitor] DEBUG nextflow.file.FileHelper - FS path type (true): /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work
-Sep-18 15:05:07.990 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418265; id: 2; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119 started: 1758225673039; exited: -; ]
-Sep-18 15:08:18.146 [Task monitor] DEBUG nextflow.executor.GridTaskHandler - Failed to get exit status for process TaskHandler[jobId: 16418265; id: 2; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119 started: 1758225673039; exited: -; ] -- exitStatusReadTimeoutMillis: 270000; delta: 270159
-Current queue status:
->   job: 16416330: RUNNING
-
-Content of workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119
-> total 28
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:00 .
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:00 ..
-> -rw-r-----. 1 dawson.budke proj-do2_projects 11355 Sep 18 15:00 .command.run
-> -rw-r-----. 1 dawson.budke proj-do2_projects 16304 Sep 18 15:00 .command.sh
-
-Sep-18 15:08:18.147 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418265; id: 2; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: COMPLETED; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119 started: 1758225673039; exited: -; ]
-Sep-18 15:08:18.173 [TaskFinalizer-2] DEBUG nextflow.processor.TaskProcessor - Handling unexpected condition for
-  task: name=GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); work-dir=/project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/54/f941c2bbfd8a7095dbcb2555db6119
-  error [nextflow.exception.ProcessFailedException]: Process `GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system
-Sep-18 15:08:18.189 [TaskFinalizer-2] INFO  nextflow.processor.TaskProcessor - [54/f941c2] NOTE: Process `GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system -- Execution is retried (1)
-Sep-18 15:08:18.376 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest) > jobId: 16418512; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5
-Sep-18 15:08:18.377 [Task submitter] INFO  nextflow.Session - [e2/9c2a21] Re-submitted process > GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest)
-Sep-18 15:10:08.011 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418512; id: 3; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5 started: 1758226133012; exited: -; ]
-Sep-18 15:15:08.027 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418512; id: 3; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5 started: 1758226133012; exited: -; ]
-Sep-18 15:20:08.050 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418512; id: 3; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5 started: 1758226133012; exited: -; ]
-Sep-18 15:20:23.124 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418512; id: 3; name: GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5 started: 1758226133012; exited: 2025-09-18T20:20:20.298832273Z; ]
-Sep-18 15:20:23.226 [TaskFinalizer-3] DEBUG nextflow.processor.TaskProcessor - Process `GENOTYPE_PROCESS (Processing genotypes for MemoryFixTest)` is unable to find [UnixPath]: `/project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/e2/9c2a217df97f3329494427e83c8cc5/sample_id_mapping.txt` (pattern: `sample_id_mapping.txt`)
-Sep-18 15:20:23.228 [TaskFinalizer-3] DEBUG nextflow.processor.TaskProcessor - Process GENOTYPE_PROCESS > Skipping output binding because one or more optional files are missing: fileoutparam<2>
-Sep-18 15:20:23.755 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENERATE_CONTROL_FILE (Generating control file for MemoryFixTest) > jobId: 16418832; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/dd/8b4fa155752d0b484db3391a1ab537
-Sep-18 15:20:23.756 [Task submitter] INFO  nextflow.Session - [dd/8b4fa1] Submitted process > GENERATE_CONTROL_FILE (Generating control file for MemoryFixTest)
-Sep-18 15:20:58.069 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418832; id: 4; name: GENERATE_CONTROL_FILE (Generating control file for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/dd/8b4fa155752d0b484db3391a1ab537 started: 1758226828114; exited: 2025-09-18T20:20:46.408374574Z; ]
-Sep-18 15:20:58.388 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process CREATE_CROSS2_OBJECT (Creating cross2 object for MemoryFixTest) > jobId: 16418835; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/cb/ce0e41f6056c231dd0ca11987c9f34
-Sep-18 15:20:58.388 [Task submitter] INFO  nextflow.Session - [cb/ce0e41] Submitted process > CREATE_CROSS2_OBJECT (Creating cross2 object for MemoryFixTest)
-Sep-18 15:21:28.153 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418835; id: 5; name: CREATE_CROSS2_OBJECT (Creating cross2 object for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/cb/ce0e41f6056c231dd0ca11987c9f34 started: 1758226888136; exited: 2025-09-18T20:21:24.849076645Z; ]
-Sep-18 15:21:28.478 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process PREPARE_GENOME_SCAN (Preparing genome scan for MemoryFixTest) > jobId: 16418837; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/51/f53bd479ae2fe4d7af1753fe72dec6
-Sep-18 15:21:28.479 [Task submitter] INFO  nextflow.Session - [51/f53bd4] Submitted process > PREPARE_GENOME_SCAN (Preparing genome scan for MemoryFixTest)
-Sep-18 15:25:08.073 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418837; id: 6; name: PREPARE_GENOME_SCAN (Preparing genome scan for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/51/f53bd479ae2fe4d7af1753fe72dec6 started: 1758226923061; exited: -; ]
-Sep-18 15:27:08.096 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418837; id: 6; name: PREPARE_GENOME_SCAN (Preparing genome scan for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/51/f53bd479ae2fe4d7af1753fe72dec6 started: 1758226923061; exited: 2025-09-18T20:27:02.930029432Z; ]
-Sep-18 15:27:08.455 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENOME_SCAN (Genome scanning for MemoryFixTest) > jobId: 16418849; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a
-Sep-18 15:27:08.455 [Task submitter] INFO  nextflow.Session - [96/ef227c] Submitted process > GENOME_SCAN (Genome scanning for MemoryFixTest)
-Sep-18 15:30:08.092 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418849; id: 7; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a started: 1758227248200; exited: -; ]
-Sep-18 15:34:33.262 [Task monitor] DEBUG nextflow.executor.GridTaskHandler - Failed to get exit status for process TaskHandler[jobId: 16418849; id: 7; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a started: 1758227248200; exited: -; ] -- exitStatusReadTimeoutMillis: 270000; delta: 270170
-Current queue status:
->   job: 16418849: ERROR
->   job: 16416330: RUNNING
-
-Content of workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a
-> total 22
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:27 .
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:27 ..
-> -rw-r-----. 1 dawson.budke proj-do2_projects 11601 Sep 18 15:27 .command.run
-> -rw-r-----. 1 dawson.budke proj-do2_projects 10583 Sep 18 15:27 .command.sh
-
-Sep-18 15:34:33.265 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418849; id: 7; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: COMPLETED; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a started: 1758227248200; exited: -; ]
-Sep-18 15:34:33.278 [TaskFinalizer-7] DEBUG nextflow.processor.TaskProcessor - Handling unexpected condition for
-  task: name=GENOME_SCAN (Genome scanning for MemoryFixTest); work-dir=/project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/96/ef227cc5ead0d968888ebab471919a
-  error [nextflow.exception.ProcessFailedException]: Process `GENOME_SCAN (Genome scanning for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system
-Sep-18 15:34:33.280 [TaskFinalizer-7] INFO  nextflow.processor.TaskProcessor - [96/ef227c] NOTE: Process `GENOME_SCAN (Genome scanning for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system -- Execution is retried (1)
-Sep-18 15:34:33.461 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENOME_SCAN (Genome scanning for MemoryFixTest) > jobId: 16418863; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/5e/872479e04e36ea991629cee62db8b0
-Sep-18 15:34:33.462 [Task submitter] INFO  nextflow.Session - [5e/872479] Re-submitted process > GENOME_SCAN (Genome scanning for MemoryFixTest)
-Sep-18 15:35:08.131 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418863; id: 8; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/5e/872479e04e36ea991629cee62db8b0 started: 1758227683189; exited: -; ]
-Sep-18 15:40:08.149 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418863; id: 8; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/5e/872479e04e36ea991629cee62db8b0 started: 1758227683189; exited: -; ]
-Sep-18 15:44:38.187 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418863; id: 8; name: GENOME_SCAN (Genome scanning for MemoryFixTest); status: COMPLETED; exit: 0; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/5e/872479e04e36ea991629cee62db8b0 started: 1758227683189; exited: 2025-09-18T20:44:14.333787928Z; ]
-Sep-18 15:44:38.368 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process PERMUTATION_TEST (Permutation testing for MemoryFixTest) > jobId: 16418908; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26
-Sep-18 15:44:38.369 [Task submitter] INFO  nextflow.Session - [aa/43438c] Submitted process > PERMUTATION_TEST (Permutation testing for MemoryFixTest)
-Sep-18 15:45:08.169 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418908; id: 9; name: PERMUTATION_TEST (Permutation testing for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26 started: 1758228288245; exited: -; ]
-Sep-18 15:50:08.193 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
-~> TaskHandler[jobId: 16418908; id: 9; name: PERMUTATION_TEST (Permutation testing for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26 started: 1758228288245; exited: -; ]
-Sep-18 15:51:53.345 [Task monitor] DEBUG nextflow.executor.GridTaskHandler - Failed to get exit status for process TaskHandler[jobId: 16418908; id: 9; name: PERMUTATION_TEST (Permutation testing for MemoryFixTest); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26 started: 1758228288245; exited: -; ] -- exitStatusReadTimeoutMillis: 270000; delta: 270166
-Current queue status:
->   job: 16418908: ERROR
->   job: 16416330: RUNNING
-
-Content of workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26
-> total 23
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:44 .
-> drwxr-s---. 2 dawson.budke proj-do2_projects  4096 Sep 18 15:44 ..
-> -rw-r-----. 1 dawson.budke proj-do2_projects 11817 Sep 18 15:44 .command.run
-> -rw-r-----. 1 dawson.budke proj-do2_projects 10280 Sep 18 15:44 .command.sh
-
-Sep-18 15:51:53.346 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[jobId: 16418908; id: 9; name: PERMUTATION_TEST (Permutation testing for MemoryFixTest); status: COMPLETED; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26 started: 1758228288245; exited: -; ]
-Sep-18 15:51:53.356 [TaskFinalizer-9] DEBUG nextflow.processor.TaskProcessor - Handling unexpected condition for
-  task: name=PERMUTATION_TEST (Permutation testing for MemoryFixTest); work-dir=/project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/aa/43438cd55e5396c211644794d6cc26
-  error [nextflow.exception.ProcessFailedException]: Process `PERMUTATION_TEST (Permutation testing for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system
-Sep-18 15:51:53.357 [TaskFinalizer-9] INFO  nextflow.processor.TaskProcessor - [aa/43438c] NOTE: Process `PERMUTATION_TEST (Permutation testing for MemoryFixTest)` terminated for an unknown reason -- Likely it has been terminated by the external system -- Execution is retried (1)
-Sep-18 15:51:53.485 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process PERMUTATION_TEST (Permutation testing for MemoryFixTest) > jobId: 16418939; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/35/ac2f08f83cb4646ac57d4b662c7ecf
-Sep-18 15:51:53.485 [Task submitter] INFO  nextflow.Session - [35/ac2f08] Re-submitted process > PERMUTATION_TEST (Permutation testing for MemoryFixTest)
+  Script_f5ea3ed586038de5: /project/do2_projects/DO_Choline/QTL2_NF/modules/scan_perm.nf
+Sep-21 16:32:13.492 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Sep-21 16:32:13.499 [main] DEBUG nextflow.Session - Session await
+Sep-21 16:32:13.586 [Actor Thread 3] DEBUG nextflow.container.SingularityCache - Apptainer found local store for image=docker://dpbudke/qtl2-pipeline:latest; path=/project/do2_projects/DO_Choline/QTL2_NF/singularity_cache/dpbudke-qtl2-pipeline-latest.img
+Sep-21 16:32:13.932 [Task submitter] DEBUG nextflow.executor.GridTaskHandler - [SLURM] submitted process GENOME_SCAN (Genome scanning for DOchln) > jobId: 16430993; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020
+Sep-21 16:32:13.933 [Task submitter] INFO  nextflow.Session - [eb/017ca9] Submitted process > GENOME_SCAN (Genome scanning for DOchln)
+Sep-21 16:37:18.276 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 16:42:18.301 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 16:47:18.321 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 16:52:18.339 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 16:57:18.356 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 17:02:18.369 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 17:07:18.384 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]
+Sep-21 17:12:18.404 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor slurm > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[jobId: 16430993; id: 1; name: GENOME_SCAN (Genome scanning for DOchln); status: RUNNING; exit: -; error: -; workDir: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/eb/017ca94d879e3f50f58254e6c50020 started: 1758490338286; exited: -; ]

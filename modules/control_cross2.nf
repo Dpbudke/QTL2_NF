@@ -120,13 +120,18 @@ process GENERATE_CONTROL_FILE {
     # Check covariate file for required columns
     covar_data <- read.csv("${covar_csv}", row.names = 1)
     
-    # Check for sex column (required)
-    if (!"Sex" %in% colnames(covar_data)) {
+    # Check for sex column (required) - case insensitive
+    covar_names_lower <- tolower(colnames(covar_data))
+    sex_col_idx <- which(covar_names_lower == "sex")
+
+    if (length(sex_col_idx) == 0) {
         stop("sex column not found in covariate file - required for DO analysis")
     }
-    
+
+    sex_col_name <- colnames(covar_data)[sex_col_idx[1]]  # Use actual column name
+
     # Check sex coding
-    sex_levels <- unique(covar_data\$Sex)
+    sex_levels <- unique(covar_data[[sex_col_name]])
     validation_log <- c(validation_log, paste("✓ Sex levels found:", paste(sex_levels, collapse = ", ")))
     
     # Determine sex codes - common patterns are f/m, F/M, female/male, Female/Male
@@ -176,7 +181,7 @@ process GENERATE_CONTROL_FILE {
         xchr = "X",
         pheno_file = "${pheno_csv}",
         covar_file = "${covar_csv}",
-        sex_covar = "Sex",
+        sex_covar = sex_col_name,
         sex_codes = sex_codes
     )
     
@@ -249,7 +254,28 @@ process CREATE_CROSS2_OBJECT {
     })
     
     validation_log <- c(validation_log, "✓ Successfully loaded cross2 object")
-    
+
+    # Set X chromosome specification for qtl2 (critical for proper X chromosome handling)
+    chr_names <- names(cross2\$geno)
+    if ("X" %in% chr_names) {
+        # Set the is_x_chr attribute directly (qtl2 approach)
+        is_x <- chr_names == "X"
+        cross2\$is_x_chr <- setNames(is_x, chr_names)
+        validation_log <- c(validation_log, "✓ X chromosome specification set for qtl2")
+        validation_log <- c(validation_log, paste("  is_x_chr:", paste(names(cross2\$is_x_chr)[cross2\$is_x_chr], collapse = ", ")))
+
+        # Generate X chromosome covariates to avoid spurious linkage (Broman et al. 2006)
+        tryCatch({
+            x_covar <- get_x_covar(cross2)
+            if (!is.null(x_covar) && ncol(x_covar) > 0) {
+                validation_log <- c(validation_log, "✓ X chromosome covariates generated successfully")
+                validation_log <- c(validation_log, paste("  X covariates:", paste(colnames(x_covar), collapse = ", ")))
+            }
+        }, error = function(e) {
+            validation_log <<- c(validation_log, paste("⚠ WARNING: Could not generate X chromosome covariates:", e\$message))
+        })
+    }
+
     # Basic cross2 object validation
     validation_log <- c(validation_log, "")
     validation_log <- c(validation_log, "=== Cross2 Object Validation ===")
@@ -287,8 +313,12 @@ process CREATE_CROSS2_OBJECT {
         validation_log <- c(validation_log, paste("✓ X chromosome genotype codes:", paste(unique_x_genos, collapse = ", ")))
         
         # Check sex information for X chromosome validation
-        if ("sex" %in% colnames(cross2\$covar)) {
-            sex_info <- cross2\$covar\$sex
+        covar_names_lower_x <- tolower(colnames(cross2\$covar))
+        sex_col_idx_x <- which(covar_names_lower_x == "sex")
+
+        if (length(sex_col_idx_x) > 0) {
+            sex_col_name_x <- colnames(cross2\$covar)[sex_col_idx_x[1]]
+            sex_info <- cross2\$covar[[sex_col_name_x]]
             sex_counts <- table(sex_info, useNA = "ifany")
             validation_log <- c(validation_log, "✓ Sex distribution for X chromosome validation:")
             for (sex in names(sex_counts)) {
@@ -344,17 +374,21 @@ process CREATE_CROSS2_OBJECT {
     validation_log <- c(validation_log, "")
     validation_log <- c(validation_log, "=== DO-Specific Covariate Validation ===")
     
-    # Check sex covariate (required for DO analysis)
-    if ("sex" %in% colnames(cross2\$covar)) {
-        sex_levels <- unique(cross2\$covar\$sex)
+    # Check sex covariate (required for DO analysis) - case insensitive
+    covar_names_lower <- tolower(colnames(cross2\$covar))
+    sex_col_idx <- which(covar_names_lower == "sex")
+
+    if (length(sex_col_idx) > 0) {
+        sex_col_name <- colnames(cross2\$covar)[sex_col_idx[1]]  # Use actual column name
+        sex_levels <- unique(cross2\$covar[[sex_col_name]])
         validation_log <- c(validation_log, paste("✓ Sex covariate levels:", paste(sex_levels, collapse = ", ")))
-        
-        sex_counts <- table(cross2\$covar\$sex, useNA = "ifany")
+
+        sex_counts <- table(cross2\$covar[[sex_col_name]], useNA = "ifany")
         validation_log <- c(validation_log, "✓ Sex distribution:")
         for (sex in names(sex_counts)) {
             validation_log <- c(validation_log, paste("  ", sex, ":", sex_counts[sex]))
         }
-        
+
         # Check for reasonable sex distribution
         if (length(sex_levels) != 2) {
             validation_log <- c(validation_log, "⚠ WARNING: Expected exactly 2 sex levels for DO mice")
@@ -404,7 +438,7 @@ process CREATE_CROSS2_OBJECT {
         issues <- c(issues, "No phenotypes")
     }
     
-    if (!"sex" %in% colnames(cross2\$covar)) {
+    if (length(which(tolower(colnames(cross2\$covar)) == "sex")) == 0) {
         ready_for_scanning <- FALSE
         issues <- c(issues, "Missing sex covariate")
     }

@@ -26,7 +26,7 @@ def helpMessage() {
         --study_prefix       Study identifier prefix for output files
     
     Optional Arguments:
-        --finalreport_file  Path to GeneSeek FinalReport file (enables full QTL pipeline)
+        --finalreport_files Path to GeneSeek FinalReport file(s) - accepts glob patterns (e.g., 'Data/FinalReport*.txt')
         --outdir            Output directory [default: results]
         --auto_prefix_samples    Automatically prefix sample IDs [default: false]
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
@@ -35,7 +35,7 @@ def helpMessage() {
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
-        Module 2: Genotype processing (requires --finalreport_file)
+        Module 2: Genotype processing (requires --finalreport_files)
         Module 3: Control file generation and cross2 object creation
         Module 4: Genome scanning and permutation testing (1000 permutations)
         Module 5: QTL Viewer data preparation and Docker deployment
@@ -43,7 +43,7 @@ def helpMessage() {
     Example:
         nextflow run main.nf \\
             --phenotype_file Data/formatted_phenotypes_for_nextflow.csv \\
-            --finalreport_file Data/FinalReport.txt \\
+            --finalreport_files 'Data/FinalReport*.txt' \\
             --study_prefix DOChln \\
             --outdir results
     
@@ -130,9 +130,10 @@ workflow {
         Channel.value(params.sample_filter ?: "null")
     )
     
-    // MODULE 2: Genotype Processing (if FinalReport file provided)
-    if (params.finalreport_file) {
-        ch_finalreport = Channel.fromPath(params.finalreport_file, checkIfExists: true)
+    // MODULE 2: Genotype Processing (if FinalReport files provided)
+    if (params.finalreport_files) {
+        ch_finalreport = Channel.fromPath(params.finalreport_files, checkIfExists: true)
+                                .collect()  // Collect all files into a single emission
         
         GENOTYPE_PROCESS(
             ch_finalreport,
@@ -234,8 +235,8 @@ workflow {
         SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
         
     } else {
-        log.info "Skipping genotype processing - no FinalReport file specified"
-        log.info "To include genotype processing, add: --finalreport_file Data/YourFinalReport.txt"
+        log.info "Skipping genotype processing - no FinalReport files specified"
+        log.info "To include genotype processing, add: --finalreport_files 'Data/FinalReport*.txt'"
     }
     
     // Display results for Module 1

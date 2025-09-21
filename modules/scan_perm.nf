@@ -291,11 +291,11 @@ process GENOME_SCAN {
     # Main genome scan with kinship correction
     if (is_coat_color_scan) {
         # For coat color, use simple scan without kinship to avoid numerical issues
-        scan_results <- scan1(genoprob, pheno, addcovar=addcovar, Xcovar=Xcovar, cores=0)
+        scan_results <- scan1(genoprob, pheno, addcovar=addcovar, Xcovar=Xcovar, cores=8)
         validation_log <- c(validation_log, "✓ Using simplified scan (no kinship) for coat color positive control")
     } else {
         # For other phenotypes, use full LOCO kinship correction
-        scan_results <- scan1(genoprob, pheno, kinship_loco, addcovar=addcovar, Xcovar=Xcovar, cores=0)
+        scan_results <- scan1(genoprob, pheno, kinship_loco, addcovar=addcovar, Xcovar=Xcovar, cores=8)
     }
     
     end_time <- Sys.time()
@@ -558,13 +558,13 @@ process PERMUTATION_TEST {
     if (is_coat_color_scan) {
         # For coat color, use simple permutation without kinship to match genome scan
         perm_results <- scan1perm(genoprob, pheno, addcovar=addcovar, Xcovar=Xcovar,
-                                 n_perm=1000, cores=0, perm_Xsp=has_x_chr, perm_strata=NULL,
+                                 n_perm=1000, cores=8, perm_Xsp=has_x_chr, perm_strata=NULL,
                                  chr_lengths=if(has_x_chr) chr_lengths else NULL)
         validation_log <- c(validation_log, "✓ Using simplified permutation (no kinship) for coat color positive control")
     } else {
         # For other phenotypes, use full LOCO kinship correction
         perm_results <- scan1perm(genoprob, pheno, kinship_loco, addcovar=addcovar, Xcovar=Xcovar,
-                                 n_perm=1000, cores=0, perm_Xsp=has_x_chr, perm_strata=NULL,
+                                 n_perm=1000, cores=8, perm_Xsp=has_x_chr, perm_strata=NULL,
                                  chr_lengths=if(has_x_chr) chr_lengths else NULL)
     }
     
