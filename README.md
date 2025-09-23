@@ -1,60 +1,87 @@
 # QTL2_NF Pipeline
 
-A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed for high-throughput quantitative trait loci mapping in Diversity Outbred (DO) and other multiparental populations.
+A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed for high-throughput quantitative trait loci mapping in Diversity Outbred (DO) and other multiparental populations. This pipeline supports comprehensive multi-phenotype analyses including clinical phenotype QTLs, expression QTLs (eQTLs), metabolite QTLs (mQTLs), and other high-dimensional molecular trait mapping applications.
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
 [![Docker](https://img.shields.io/badge/docker-enabled-brightgreen.svg)](https://www.docker.com/)
 
 ## Overview
 
-QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and genotype data to identify quantitative trait loci (QTLs) with rigorous statistical significance testing. The pipeline is optimized for large-scale datasets and provides interactive visualization through QTL Viewer integration.
+QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and genotype data to identify quantitative trait loci (QTLs) with rigorous statistical significance testing. The pipeline is optimized for large-scale datasets and provides interactive visualization through QTL Viewer integration. Building upon methodologies from the DO_Pipe project (https://github.com/exsquire/DO_pipe), this pipeline implements automated workflows for multiparental population analysis with enhanced scalability and reproducibility.
 
-### Key Features
+### Multi-Phenotype Applications
 
-- **Scalable Architecture**: Handles large datasets (382+ samples, 13,000+ phenotypes)
-- **Memory Optimized**: Up to 1TB memory allocation for genome scanning
-- **Resume Capability**: Start from any pipeline step using existing outputs
-- **Smart Filtering**: LOD threshold-based permutation optimization
-- **Interactive Visualization**: Integrated QTL Viewer deployment
-- **HPC Ready**: SLURM executor with containerization support
+This pipeline is specifically designed to handle diverse phenotype types commonly encountered in systems genetics:
+
+- **Clinical Phenotype QTLs**: Traditional quantitative traits such as body weight, organ weights, biochemical measurements, and physiological parameters
+- **Expression QTLs (eQTLs)**: RNA-seq derived gene expression levels with built-in normalization workflows including filtering, CPM normalization, and inverse rank normalization
+- **Metabolite QTLs (mQTLs)**: Metabolomics data from mass spectrometry or NMR platforms
+- **Protein QTLs (pQTLs)**: Proteomics measurements from various analytical platforms
+- **Epigenetic QTLs**: DNA methylation, histone modifications, and chromatin accessibility data
+- **Behavioral and Cognitive Traits**: Neurobehavioral assessments and cognitive performance metrics
+- **High-Dimensional Molecular Data**: Any quantitative molecular phenotype suitable for linear modeling
+
+The pipeline automatically handles the preprocessing requirements for molecular data types, including appropriate filtering thresholds, normalization strategies, and transformation procedures to ensure optimal QTL detection power.
 
 ## Pipeline Architecture
 
-The pipeline consists of 9 main modules organized into a sequential workflow:
+The pipeline consists of 9 main modules plus an optional quality control module, organized into a sequential workflow, incorporating proven methodologies from the DO_Pipe project with enhanced automation and scalability:
 
 ### Module 1: Phenotype Processing (`phenotype_process.nf`)
-**Purpose**: Validate and prepare phenotype/covariate data according to r/qtl2 specifications
+**Purpose**: Comprehensive validation and preparation of phenotype/covariate data according to r/qtl2 specifications with robust support for diverse molecular data types and experimental designs
 
 **Key Functions**:
-- Sample ID format validation and consistency checking
-- Numeric phenotype matrix enforcement
-- Required covariate validation (sex, generation)
-- Outlier detection and batch effect diagnostics
-- r/qtl2-compliant CSV structure generation
+- **Data Structure Validation**: Automated parsing of DO_Pipe-formatted CSV files with header row indicators for seamless data type recognition
+- **Sample ID Standardization**: Cross-validation of sample identifiers between phenotype and genotype datasets with automatic format harmonization
+- **Numeric Matrix Enforcement**: Conversion of phenotype data to numeric matrices with intelligent handling of missing data patterns and outlier detection
+- **Required Covariate Validation**: Verification of essential covariates (Sex, generation) as mandated by r/qtl2 for Diversity Outbred cross analysis
+- **Optional Covariate Integration**: Flexible incorporation of experimental factors (Diet, batch, age, treatment groups) with automatic categorical encoding
+- **Multi-Phenotype Support**: Scalable validation for high-dimensional datasets including thousands of molecular traits (transcripts, metabolites, proteins)
+- **Quality Control Diagnostics**: Comprehensive outlier detection, batch effect assessment, and correlation analysis with detailed visualization reports
+- **Format Compliance**: Generation of r/qtl2-compliant data structures following DO_Pipe formatting conventions with proper metadata integration
+- **Missing Data Management**: Intelligent handling of missing values with appropriate encoding strategies for downstream statistical analysis
+
+**Input Format Requirements**:
+The module processes specially formatted CSV files with the DO_Pipe convention:
+- **Row 1**: Type indicators distinguishing covariate and phenotype columns
+- **Row 2**: Column headers with standardized naming conventions
+- **Data Rows**: Sample-wise measurements with automatic data type validation
+- **Supported Scales**: Handles diverse phenotype scales from clinical measurements to high-dimensional molecular data
+
+**Technical Implementation**: Uses advanced R data processing libraries (dplyr, data.table) with comprehensive error checking and logging for reliable data preparation in high-throughput environments.
 
 **Resources**: 1 CPU, 2GB RAM, 1 hour
 
 ### Module 2: Genotype Processing (`genotype_process.nf`)
-**Purpose**: Convert GeneSeek FinalReport to r/qtl2 format
+**Purpose**: Comprehensive conversion of GeneSeek FinalReport files to r/qtl2-compatible format using enhanced DO_Pipe-derived methodologies with robust quality control and validation
 
 **Key Functions**:
-- GeneSeek FinalReport parsing with batch handling
-- Genotype call conversion to A/H/B encoding
-- Chromosome-specific file generation (1-19, X, Y, M)
-- Sample ID consistency with phenotype data
-- Missing data handling and integrity validation
+- **GeneSeek FinalReport Parsing**: Advanced parsing engine supporting multiple input files with automated batch processing and error recovery
+- **Genotype Call Conversion**: Systematic conversion of SNP calls to A/H/B encoding scheme specifically optimized for r/qtl2 Diversity Outbred cross analysis
+- **Chromosome-Specific Organization**: Automated generation of chromosome-specific genotype files (autosomes 1-19, sex chromosomes X and Y, mitochondrial chromosome M) with proper genetic map integration
+- **Sample ID Harmonization**: Cross-validation and standardization of sample identifiers ensuring perfect consistency with phenotype datasets
+- **Missing Data Management**: Intelligent handling of missing genotype calls with appropriate encoding strategies for downstream QTL analysis
+- **Marker Quality Control**: Comprehensive assessment including call rate evaluation, Hardy-Weinberg equilibrium testing, and marker integrity validation
+- **Reference Integration**: Automated download and integration of MGI (Mouse Genome Informatics) reference files and genetic maps for accurate genomic positioning
+- **Array Platform Support**: Native compatibility with standard mouse genotyping arrays (GigaMUGA, MiniMUGA, MEGA-MUGA) with platform-specific optimization
+- **Allele Code Processing**: Sophisticated allele coding system handling founder strain contributions with proper heterozygote detection
+- **Validation Reporting**: Detailed quality control reports with summary statistics, marker distribution analysis, and validation metrics
+
+**Technical Implementation**: Leverages high-performance R data processing with memory-optimized data structures for handling large-scale genotyping datasets (>65K markers, >1000 samples) efficiently.
 
 **Resources**: 2 CPUs, 64GB RAM, 4 hours
 
 ### Module 3: Control File Generation (`control_cross2.nf`)
-**Purpose**: Create r/qtl2 control files and metadata structures
+**Purpose**: Create r/qtl2 control files and metadata structures following DO_Pipe specifications
 
 **Key Functions**:
-- JSON control file generation with complete metadata
-- File path specification for execution environment
-- Genotype and sex code mappings
-- Cross information and founder strain definitions
-- Reference file integration (genetic maps, founder genotypes)
+- JSON control file generation with complete metadata for multiparental crosses
+- File path specification and validation for execution environment compatibility
+- Genotype encoding mappings (A/H/B) and sex chromosome handling for DO populations
+- Cross type specification with founder strain definitions (8 founder strains for DO)
+- Reference file integration including genetic maps, founder genotypes, and marker annotations
+- Cross information structure creation compatible with r/qtl2 requirements
+- Integration of DO_Pipe cross2 generation methodologies for robust object creation
 
 **Resources**: 2 CPUs, 4GB RAM, 2 hours
 
@@ -131,6 +158,24 @@ The pipeline consists of 9 main modules organized into a sequential workflow:
 
 **Resources**: 8 CPUs, 64GB RAM, 2 hours
 
+### Module 10: DO Sample Mixup QC (Optional) (`do_mixup_qc.nf`)
+**Purpose**: Optional quality control module for detecting sample mix-ups in Diversity Outbred mouse data
+
+**Key Functions**:
+- Sample identity verification using genetic markers and phenotype correlations
+- Cis-eQTL analysis for transcript-genotype consistency checking
+- Distance-based clustering analysis for sample relationship validation
+- Automated detection of potential sample swaps or mislabeling
+- Corrected sample mapping generation for data integrity
+- Comprehensive HTML reporting with visualizations and recommendations
+- Integration with existing QTL results for enhanced validation accuracy
+
+**Methodology**: Based on Broman et al. (2015) G3 methodologies for multiparental population sample validation, this module performs systematic checks for sample integrity using both genetic and molecular phenotype data.
+
+**Usage**: Can be run as standalone quality control or integrated into the main pipeline workflow for comprehensive data validation.
+
+**Resources**: 8 CPUs, 32GB RAM, 3 hours
+
 ## Installation and Setup
 
 ### Prerequisites
@@ -164,22 +209,67 @@ nextflow run main.nf \
 ## Usage Examples
 
 ### Full Pipeline Execution
+
+**Standard Multi-Phenotype QTL Analysis**:
 ```bash
-# Complete analysis with standard parameters
+# Complete eQTL analysis with comprehensive parameter set
 nextflow run main.nf \
   --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
   --finalreport_files 'Data/FinalReport*.txt' \
-  --study_prefix DOchln \
+  --study_prefix DOchln_eQTL \
   --lod_threshold 7.0 \
+  --outdir results/eQTL_analysis \
   -profile standard
 
-# With sample filtering (males on high-cholesterol diet)
+# Clinical phenotype QTL analysis with lower threshold
+nextflow run main.nf \
+  --phenotype_file Data/clinical_traits.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_clinical \
+  --lod_threshold 5.0 \
+  --outdir results/clinical_QTL \
+  -profile standard
+```
+
+**Sample Filtering Applications**:
+```bash
+# Male-specific analysis on high-cholesterol diet
 nextflow run main.nf \
   --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
   --finalreport_files 'Data/FinalReport*.txt' \
   --study_prefix DOchln_males_hc \
   --lod_threshold 7.0 \
   --sample_filter '{"Sex":["male"],"Diet":["hc"]}' \
+  --outdir results/sex_diet_specific \
+  -profile standard
+
+# Batch-specific analysis (removing batch effects)
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_batch1 \
+  --lod_threshold 6.0 \
+  --sample_filter '{"batch":["B1","B2"]}' \
+  -profile standard
+
+# Generation-specific analysis for population structure control
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_G6plus \
+  --lod_threshold 7.0 \
+  --sample_filter '{"generation":["6","7","8","9"]}' \
+  -profile standard
+```
+
+**Multiple Array Processing**:
+```bash
+# Processing multiple FinalReport files from different batches
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport_Batch*.txt' \
+  --study_prefix DOchln_multibatch \
+  --lod_threshold 7.0 \
   -profile standard
 ```
 
@@ -228,21 +318,91 @@ nextflow run main.nf \
   -profile standard
 ```
 
+### DO Sample Mixup QC (Standalone)
+The pipeline includes an optional quality control module for detecting sample mix-ups:
+
+```bash
+# Standalone mixup detection using existing QTL results
+nextflow run modules/do_mixup_qc.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --cross2_object results/04_cross2_creation/DOchln_cross2_object.rds \
+  --qtl_results results/06_genome_scanning/DOchln_genome_scan_results.rds \
+  --study_prefix DOchln_mixup_check \
+  --outdir results/quality_control
+
+# Simplified mixup detection without existing QTL results (uses cis-eQTL)
+nextflow run modules/do_mixup_qc.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --cross2_object results/04_cross2_creation/DOchln_cross2_object.rds \
+  --study_prefix DOchln_simple_mixup \
+  --outdir results/quality_control
+```
+
 ## Input Data Requirements
 
 ### Phenotype File Format
-CSV file with specific structure requirements:
-- **Sample ID column**: Must match genotype sample IDs exactly
-- **Numeric phenotype columns**: All phenotype data must be numeric
-- **Required covariates**: Sex (male/female), generation number
-- **Optional covariates**: Diet, batch, age, etc.
+The pipeline requires a specially formatted CSV file that follows the DO_Pipe convention with header row indicators. This format supports multi-phenotype analyses including clinical traits, molecular measurements, and high-dimensional data:
 
-Example structure:
+**File Structure Requirements**:
+The pipeline uses a specialized CSV format developed by the DO_Pipe project that facilitates automated parsing of metadata and phenotype information:
+
+- **Row 1**: Column type indicators
+  - Column A: empty (reserved for sample IDs)
+  - Column B: "covariate" (marks the beginning of covariate columns)
+  - Column where phenotypes begin: "phenotype" (marks transition from covariates to phenotype data)
+  - All other columns in Row 1: empty (continuation of covariate or phenotype sections)
+- **Row 2**: Actual column names
+  - Column A: "SampleID" (sample identifier column)
+  - Covariate columns: Sex, generation, batch, Diet, coat_color, Age, etc.
+  - Phenotype columns: transcript names (for eQTL), metabolite IDs (for mQTL), clinical trait names
+- **Row 3 and beyond**: Sample data with numeric phenotype values and categorical covariate values
+
+**Required Columns**:
+- **SampleID**: Must match genotype sample IDs exactly (e.g., DOchln_001, DOchln_002)
+- **Sex**: "male" or "female" (required for r/qtl2 DO crosses)
+- **generation**: Numeric generation number (required for DO population structure)
+
+**Optional Covariates**:
+- **batch**: Experimental batch identifier for batch effect correction
+- **Diet**: Treatment group (e.g., "hc", "lc" for high/low cholesterol)
+- **coat_color**: Coat color measurements for validation analyses
+- **Age**: Age at measurement or sacrifice
+- Additional experimental factors as needed
+
+**Phenotype Data Types Supported**:
+- **Clinical phenotypes**: Body weight, organ weights, biochemical measurements
+- **Gene expression**: RNA-seq derived expression levels (log2 CPM + inverse rank normalized)
+- **Metabolites**: Metabolomics measurements from various platforms
+- **Proteins**: Quantitative proteomics data
+- **Any numeric trait**: Suitable for linear mixed model analysis
+
+Example structure for multi-phenotype analysis:
 ```csv
-sample_id,Sex,generation,coat_color,weight_10wk,liver_weight
-DO1001,male,1,0.85,25.4,1.2
-DO1002,female,1,0.12,22.1,0.9
+,covariate,,,phenotype,,,
+SampleID,Sex,generation,batch,Slc2a2,Apob,liver_weight
+DOchln_001,male,1,B1,-0.245,1.432,1.24
+DOchln_002,female,1,B1,0.891,-0.672,0.98
 ```
+
+**Data Preprocessing Workflow**:
+For molecular phenotypes (eQTL, mQTL analyses), the preparatory R Markdown workflow (`Metadata_phenotype_QTL2_NF.Rmd`) provides comprehensive automated preprocessing including:
+
+**RNA-seq Expression Data (eQTL Analysis)**:
+- **Filtering**: Low-expression transcript removal using edgeR::filterByExpr() to retain genes with sufficient expression across samples
+- **Normalization**: Library size normalization via counts-per-million (CPM) transformation with prior count adjustment
+- **Transformation**: Gene-wise inverse rank normalization (IRN) for optimal linear modeling and normal distribution approximation
+- **Quality Control**: Sample correlation analysis and batch effect assessment
+
+**Sample Processing**:
+- **ID Standardization**: Automatic conversion of variant sample naming conventions (Dochln, DOCHLN, DOChln) to standardized format (DOchln_###)
+- **Duplicate Removal**: Identification and removal of duplicate samples based on predefined exclusion lists
+- **Consistency Validation**: Cross-validation of sample IDs between phenotype and genotype datasets
+- **Missing Data Handling**: Appropriate encoding and documentation of missing values for downstream r/qtl2 analysis
+
+**Metadata Integration**:
+- **Covariate Validation**: Verification of required covariates (Sex, generation) for DO cross analysis
+- **Batch Integration**: Optional batch effect covariates for experimental design control
+- **Format Conversion**: Automated generation of r/qtl2-compatible CSV structure with proper header indicators
 
 ### Genotype File Format
 - **GeneSeek FinalReport.txt**: Standard Illumina genotyping array output
@@ -361,41 +521,49 @@ The `--lod_threshold` parameter provides significant computational savings:
 - **Reduced parallelization**: cores=8 prevents out-of-memory errors
 - **Smart filtering**: Pre-filter phenotypes before expensive permutation testing
 
-## Troubleshooting
 
-### Common Issues
+## DO_Pipe Integration and Acknowledgments
 
-**Memory Errors**:
-```bash
-# Increase memory allocation in nextflow.config
-withName: GENOME_SCAN {
-    memory = '1 TB'
-}
-```
+QTL2_NF represents a comprehensive automation and scaling of methodologies originally developed in the DO_Pipe project (https://github.com/exsquire/DO_pipe), which provides foundational scripts and approaches for Diversity Outbred population analysis. This pipeline transforms the manual DO_Pipe workflow into a fully automated, reproducible, and scalable Nextflow implementation while preserving the scientific rigor and methodological approaches of the original project.
 
-**Sample ID Mismatches**:
-- Verify phenotype and genotype sample IDs match exactly
-- Check for leading/trailing whitespace or special characters
-- Review Module 1 validation report for specific issues
+**Key DO_Pipe Integrations and Enhancements**:
 
-**Resume Failures**:
-```bash
-# Verify required files exist for resume step
-ls results/05_genome_scan_preparation/  # For --resume_from genome_scan
-ls results/06_genome_scanning/          # For --resume_from permutation
-```
+**Genotype Processing (Module 2)**:
+- Adapts DO_Pipe's comprehensive approach for GeneSeek FinalReport file parsing and validation
+- Incorporates DO_Pipe's sample filtering strategies and marker quality control methodologies
+- Automates chromosome-specific file generation following DO_Pipe formatting standards
+- Enhances original scripts with improved error handling and resource management for HPC environments
 
-**SLURM Job Failures**:
-- Check cluster resource availability
-- Verify account permissions and allocations
-- Review SLURM output logs in `work/` directory
+**Cross2 Object Creation (Module 3)**:
+- Directly implements DO_Pipe's cross2 generation logic with enhanced automation
+- Preserves DO_Pipe's metadata structure requirements and founder strain definitions (8 DO founder strains)
+- Adds comprehensive validation and diagnostics beyond the original DO_Pipe implementation
+- Integrates reference file handling and genetic map specifications from DO_Pipe standards
 
-### Getting Help
+**Data Format Conventions**:
+- Maintains full compatibility with DO_Pipe's phenotype file format using header row indicators
+- Preserves DO_Pipe's covariate/phenotype column distinction methodology
+- Extends DO_Pipe's sample ID standardization procedures for improved robustness
+- Implements DO_Pipe's approach to handling missing data and categorical covariates
 
-- **Pipeline issues**: Check execution reports in `results/pipeline_info/`
-- **Resource problems**: Review SLURM logs and resource monitoring
-- **Data format errors**: Examine Module 1 validation reports
-- **Performance optimization**: Adjust `--lod_threshold` based on dataset size
+**Statistical Methodology**:
+- Builds upon DO_Pipe's QTL mapping strategies using r/qtl2 linear mixed models
+- Incorporates DO_Pipe's permutation testing framework with enhanced computational efficiency
+- Extends DO_Pipe's significance threshold calculation methods with multi-level thresholding
+- Preserves DO_Pipe's kinship matrix generation and LOCO (Leave One Chromosome Out) correction approaches
+
+**Quality Control Integration**:
+- Implements enhanced versions of DO_Pipe's data validation procedures
+- Adds automated sample mixup detection capabilities based on established DO population analysis methods
+- Incorporates DO_Pipe's outlier detection and batch effect assessment strategies
+
+**Automation and Scalability Enhancements**:
+- Transforms DO_Pipe's manual R scripts into containerized, reproducible Nextflow modules
+- Adds intelligent resource management and parallel processing capabilities for large datasets
+- Implements resume functionality and checkpoint recovery not available in original DO_Pipe
+- Provides automated Docker-based QTL Viewer deployment extending DO_Pipe's visualization capabilities
+
+We gratefully acknowledge the DO_Pipe project and its contributors for providing the foundational scientific methodology and computational framework that enabled the development of this automated pipeline workflow. The DO_Pipe project's rigorous approach to multiparental population analysis forms the scientific backbone of QTL2_NF's implementation.
 
 ## Citation
 
@@ -405,10 +573,14 @@ If you use QTL2_NF in your research, please cite:
 
 - **Nextflow**: Di Tommaso P, Chatzou M, Floden EW, Barja PP, Palumbo E, Notredame C (2017) Nextflow enables reproducible computational workflows. Nature Biotechnology 35:316-319.
 
+- **DO_Pipe**: Please acknowledge the DO_Pipe project (https://github.com/exsquire/DO_pipe) for foundational methodologies incorporated into this pipeline.
+
 ## Acknowledgments
 
-This pipeline builds upon the foundational work of the Churchill Laboratory's R/qtl2 software and incorporates methodology from the Diversity Outbred analysis pipeline. Special thanks to the r/qtl2 development team and the Mouse Genetics community for their continued contributions to quantitative genetics analysis tools.
+This pipeline builds upon the foundational work of the Churchill Laboratory's R/qtl2 software, incorporates methodology from the DO_Pipe Diversity Outbred analysis pipeline, and leverages the broader quantitative genetics community's contributions. Special thanks to:
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+- The r/qtl2 development team for creating robust software for multiparental population analysis
+- The DO_Pipe project contributors for providing foundational scripts and methodologies
+- The Mouse Genetics community for continued contributions to quantitative genetics analysis tools
+- The Nextflow development team for enabling scalable workflow management
+- The broader systems genetics community for advancing high-dimensional phenotype analysis methods

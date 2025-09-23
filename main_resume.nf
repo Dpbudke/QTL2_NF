@@ -122,7 +122,7 @@ if (params.resume_from && !params.study_prefix) {
 include { PHENOTYPE_PROCESS } from './modules/phenotype_process.nf'
 include { GENOTYPE_PROCESS  } from './modules/genotype_process.nf'
 include { GENERATE_CONTROL_FILE; CREATE_CROSS2_OBJECT } from './modules/control_cross2.nf'
-include { PREPARE_GENOME_SCAN; GENOME_SCAN; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
+include { PREPARE_GENOME_SCAN; GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/qtl_viewer.nf'
 
 /*
@@ -287,10 +287,11 @@ workflow {
             ch_genetic_map = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genetic_map.rds", "genetic map"))
         }
 
-        // MODULE 6: Genome Scanning
+        // MODULE 6: HPC Array Genome Scanning
         if (shouldRunStep('genome_scan', params.resume_from)) {
-            log.info "Running GENOME_SCAN with optimized memory settings"
+            log.info "Running HPC Array Genome Scan with massive parallelization"
 
+            // Step 1: Coordinator - Create chunk information
             GENOME_SCAN(
                 ch_cross2_object,
                 ch_genoprob,
@@ -299,15 +300,42 @@ workflow {
                 Channel.value(params.lod_threshold)
             )
 
-            ch_scan_results = GENOME_SCAN.out.scan_results
-            ch_filtered_phenotypes = GENOME_SCAN.out.filtered_phenotypes
+            // Step 2: Parse chunk info and create array jobs
+            chunk_info = GENOME_SCAN.out.chunk_info
+                .splitCsv(header: true)
+                .map { row ->
+                    tuple(row.chunk_id as Integer, row.pheno_start as Integer, row.pheno_end as Integer)
+                }
 
-            GENOME_SCAN.out.validation_report.view { "Genome scan report: $it" }
-            GENOME_SCAN.out.peaks.view { "Preliminary peaks found: $it" }
+            // Step 3: Launch array jobs - one per chunk
+            GENOME_SCAN_CHUNK(
+                ch_cross2_object.first(),
+                ch_genoprob.first(),
+                ch_kinship.first(),
+                ch_study_prefix.first(),
+                chunk_info.map { it[0] },  // chunk_id
+                chunk_info.map { it[1] },  // pheno_start
+                chunk_info.map { it[2] }   // pheno_end
+            )
+
+            // Step 4: Combine all chunk results
+            COMBINE_SCAN_RESULTS(
+                GENOME_SCAN_CHUNK.out.chunk_results.collect(),
+                ch_cross2_object.first(),
+                ch_study_prefix.first(),
+                Channel.value(params.lod_threshold)
+            )
+
+            ch_scan_results = COMBINE_SCAN_RESULTS.out.scan_results
+            ch_filtered_phenotypes = COMBINE_SCAN_RESULTS.out.filtered_phenotypes
+
+            GENOME_SCAN.out.setup_report.view { "Array setup report: $it" }
+            COMBINE_SCAN_RESULTS.out.validation_report.view { "HPC array results: $it" }
+            COMBINE_SCAN_RESULTS.out.peaks.view { "Preliminary peaks found: $it" }
         } else {
-            log.info "Skipping GENOME_SCAN - loading from existing files"
-            ch_scan_results = Channel.fromPath(checkFileExists("${params.outdir}/06_genome_scanning/${params.study_prefix}_scan_results.rds", "scan results"))
-            ch_filtered_phenotypes = Channel.fromPath(checkFileExists("${params.outdir}/06_genome_scanning/${params.study_prefix}_filtered_phenotypes.txt", "filtered phenotypes"))
+            log.info "Skipping HPC Array Genome Scan - loading from existing files"
+            ch_scan_results = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_scan_results.rds", "scan results"))
+            ch_filtered_phenotypes = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt", "filtered phenotypes"))
         }
 
         // MODULE 7: Permutation Testing

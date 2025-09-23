@@ -96,7 +96,7 @@ if (!phenotype_input.exists()) {
 include { PHENOTYPE_PROCESS } from './modules/phenotype_process.nf'
 include { GENOTYPE_PROCESS  } from './modules/genotype_process.nf'
 include { GENERATE_CONTROL_FILE; CREATE_CROSS2_OBJECT } from './modules/control_cross2.nf'
-include { PREPARE_GENOME_SCAN; GENOME_SCAN; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
+include { PREPARE_GENOME_SCAN; GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/qtl_viewer.nf'
 
 /*
