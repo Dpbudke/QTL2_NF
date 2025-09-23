@@ -36,9 +36,13 @@ def helpMessage() {
     Pipeline Modules:
         Module 1: Phenotype processing and validation
         Module 2: Genotype processing (requires --finalreport_files)
-        Module 3: Control file generation and cross2 object creation
-        Module 4: Genome scanning and permutation testing (1000 permutations)
-        Module 5: QTL Viewer data preparation and Docker deployment
+        Module 3: Control file generation
+        Module 4: Cross2 object creation
+        Module 5: Genome scan preparation (with increased resources)
+        Module 6: HPC array-based genome scanning
+        Module 7: Permutation testing (1000 permutations)
+        Module 8: Significant QTL identification
+        Module 9: QTL Viewer data preparation and Docker deployment
     
     Example:
         nextflow run main.nf \\
@@ -93,11 +97,15 @@ if (!phenotype_input.exists()) {
 ========================================================================================
 */
 
-include { PHENOTYPE_PROCESS } from './modules/phenotype_process.nf'
-include { GENOTYPE_PROCESS  } from './modules/genotype_process.nf'
-include { GENERATE_CONTROL_FILE; CREATE_CROSS2_OBJECT } from './modules/control_cross2.nf'
-include { PREPARE_GENOME_SCAN; GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
-include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/qtl_viewer.nf'
+include { PHENOTYPE_PROCESS } from './modules/01_phenotype_process.nf'
+include { GENOTYPE_PROCESS  } from './modules/02_genotype_process.nf'
+include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
+include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
+include { PREPARE_GENOME_SCAN } from './modules/05_prepare_genome_scan.nf'
+include { GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS } from './modules/06_qtl_analysis.nf'
+include { PERMUTATION_TEST } from './modules/07_permutation_testing.nf'
+include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
+include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
 /*
 ========================================================================================
@@ -172,12 +180,13 @@ workflow {
         CREATE_CROSS2_OBJECT.out.cross2_object.view { "Cross2 object created: $it" }
         CREATE_CROSS2_OBJECT.out.validation_report.view { "Cross2 validation report: $it" }
         
-        // MODULE 4: Genome Scanning and Permutation Testing
+        // MODULE 5: Genome Scan Preparation (with increased resources)
         PREPARE_GENOME_SCAN(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             ch_study_prefix
         )
-        
+
+        // MODULE 6: HPC Array-based Genome Scanning
         GENOME_SCAN(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             PREPARE_GENOME_SCAN.out.genoprob,
@@ -185,7 +194,8 @@ workflow {
             ch_study_prefix,
             Channel.value(params.lod_threshold)
         )
-        
+
+        // MODULE 7: Permutation Testing
         PERMUTATION_TEST(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             PREPARE_GENOME_SCAN.out.genoprob,
@@ -194,7 +204,8 @@ workflow {
             ch_study_prefix,
             Channel.value(params.lod_threshold)
         )
-        
+
+        // MODULE 8: Significant QTL Identification
         IDENTIFY_SIGNIFICANT_QTLS(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             GENOME_SCAN.out.scan_results,
@@ -203,7 +214,7 @@ workflow {
             ch_study_prefix
         )
 
-        // MODULE 5: QTL Viewer Integration
+        // MODULE 9: QTL Viewer Integration
         PREPARE_QTLVIEWER_DATA(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             PREPARE_GENOME_SCAN.out.genoprob,
@@ -219,7 +230,7 @@ workflow {
             ch_study_prefix
         )
 
-        // Display results for Module 4
+        // Display results for Modules 5-8
         PREPARE_GENOME_SCAN.out.validation_report.view { "Genome scan preparation report: $it" }
         GENOME_SCAN.out.validation_report.view { "Genome scan report: $it" }
         GENOME_SCAN.out.peaks.view { "Preliminary peaks found: $it" }
@@ -228,7 +239,7 @@ workflow {
         IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 
-        // Display results for Module 5
+        // Display results for Module 9
         PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
         SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
         SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }

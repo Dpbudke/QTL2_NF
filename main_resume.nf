@@ -119,11 +119,15 @@ if (params.resume_from && !params.study_prefix) {
 ========================================================================================
 */
 
-include { PHENOTYPE_PROCESS } from './modules/phenotype_process.nf'
-include { GENOTYPE_PROCESS  } from './modules/genotype_process.nf'
-include { GENERATE_CONTROL_FILE; CREATE_CROSS2_OBJECT } from './modules/control_cross2.nf'
-include { PREPARE_GENOME_SCAN; GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS; PERMUTATION_TEST; IDENTIFY_SIGNIFICANT_QTLS } from './modules/scan_perm.nf'
-include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/qtl_viewer.nf'
+include { PHENOTYPE_PROCESS } from './modules/01_phenotype_process.nf'
+include { GENOTYPE_PROCESS  } from './modules/02_genotype_process.nf'
+include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
+include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
+include { PREPARE_GENOME_SCAN } from './modules/05_prepare_genome_scan.nf'
+include { GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS } from './modules/06_qtl_analysis.nf'
+include { PERMUTATION_TEST } from './modules/07_permutation_testing.nf'
+include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
+include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
 /*
 ========================================================================================
@@ -358,8 +362,8 @@ workflow {
             PERMUTATION_TEST.out.thresholds.view { "Significance thresholds: $it" }
         } else {
             log.info "Skipping PERMUTATION_TEST - loading from existing files"
-            ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_perm_results.rds", "permutation results"))
-            ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_thresholds.csv", "significance thresholds"))
+            ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_permutation_results.rds", "permutation results"))
+            ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_significance_thresholds.csv", "significance thresholds"))
         }
 
         // MODULE 8: Significant QTL Identification
