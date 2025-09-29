@@ -101,9 +101,9 @@ include { PHENOTYPE_PROCESS } from './modules/01_phenotype_process.nf'
 include { GENOTYPE_PROCESS  } from './modules/02_genotype_process.nf'
 include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
 include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
-include { PREPARE_GENOME_SCAN } from './modules/05_prepare_genome_scan.nf'
-include { GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS } from './modules/06_qtl_analysis.nf'
-include { PERMUTATION_TEST } from './modules/07_permutation_testing.nf'
+include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
+include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
+include { PERMUTATION_SETUP; PERMUTATION_BATCH; COMBINE_PERMUTATION_RESULTS } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
@@ -180,27 +180,92 @@ workflow {
         CREATE_CROSS2_OBJECT.out.cross2_object.view { "Cross2 object created: $it" }
         CREATE_CROSS2_OBJECT.out.validation_report.view { "Cross2 validation report: $it" }
         
-        // MODULE 5: Genome Scan Preparation (with increased resources)
-        PREPARE_GENOME_SCAN(
+        // MODULE 5: Genome Scan Preparation (simplified single-process)
+        PREPARE_GENOME_SCAN_SETUP(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             ch_study_prefix
         )
 
-        // MODULE 6: HPC Array-based Genome Scanning
-        GENOME_SCAN(
+        // MODULE 6: Full Genome Scan (Batch Processing)
+        GENOME_SCAN_SETUP(
             CREATE_CROSS2_OBJECT.out.cross2_object,
-            PREPARE_GENOME_SCAN.out.genoprob,
-            PREPARE_GENOME_SCAN.out.kinship,
             ch_study_prefix,
             Channel.value(params.lod_threshold)
         )
 
-        // MODULE 7: Permutation Testing
-        PERMUTATION_TEST(
+        GENOME_SCAN_SETUP.out.summary.view { "Chunking summary: $it" }
+
+        // Create batch IDs from batch file
+        GENOME_SCAN_SETUP.out.batch_file
+            .splitText()
+            .map { it.trim() }
+            .filter { !it.startsWith('batch_id') }
+            .map { it.split('\t')[0] }
+            .unique()
+            .set { ch_batch_ids }
+
+        // Process batches in parallel
+        GENOME_SCAN_BATCH(
+            ch_batch_ids,
             CREATE_CROSS2_OBJECT.out.cross2_object,
-            PREPARE_GENOME_SCAN.out.genoprob,
-            PREPARE_GENOME_SCAN.out.kinship,
-            GENOME_SCAN.out.filtered_phenotypes,
+            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+            PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
+            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
+            GENOME_SCAN_SETUP.out.chunk_file,
+            GENOME_SCAN_SETUP.out.batch_file,
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+
+        // Combine all batch results
+        COMBINE_BATCH_RESULTS(
+            GENOME_SCAN_BATCH.out.batch_results.collect(),
+            GENOME_SCAN_BATCH.out.batch_peaks.collect(),
+            GENOME_SCAN_BATCH.out.batch_filtered_phenos.collect(),
+            GENOME_SCAN_BATCH.out.batch_log.collect(),
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+
+        COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
+        COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
+
+        // MODULE 7: Permutation Testing (Batched Approach)
+        // Setup permutation batching
+        PERMUTATION_SETUP(
+            COMBINE_BATCH_RESULTS.out.filtered_phenotypes,
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+
+        PERMUTATION_SETUP.out.summary.view { "Permutation chunking summary: $it" }
+
+        // Create batch IDs from batch file
+        PERMUTATION_SETUP.out.batch_file
+            .splitText()
+            .map { it.trim() }
+            .filter { !it.startsWith('batch_id') }
+            .map { it.split('\t')[0] }
+            .unique()
+            .set { ch_perm_batch_ids }
+
+        // Process permutation batches in parallel
+        PERMUTATION_BATCH(
+            ch_perm_batch_ids,
+            CREATE_CROSS2_OBJECT.out.cross2_object,
+            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
+            PERMUTATION_SETUP.out.chunk_file,
+            PERMUTATION_SETUP.out.batch_file,
+            ch_study_prefix,
+            Channel.value(params.lod_threshold)
+        )
+
+        // Combine all permutation batch results
+        COMBINE_PERMUTATION_RESULTS(
+            PERMUTATION_BATCH.out.batch_perm_results.collect(),
+            PERMUTATION_BATCH.out.batch_thresholds.collect(),
+            PERMUTATION_BATCH.out.batch_log.collect(),
             ch_study_prefix,
             Channel.value(params.lod_threshold)
         )
@@ -208,19 +273,19 @@ workflow {
         // MODULE 8: Significant QTL Identification
         IDENTIFY_SIGNIFICANT_QTLS(
             CREATE_CROSS2_OBJECT.out.cross2_object,
-            GENOME_SCAN.out.scan_results,
-            PERMUTATION_TEST.out.perm_results,
-            PERMUTATION_TEST.out.thresholds,
+            COMBINE_BATCH_RESULTS.out.scan_results,
+            COMBINE_PERMUTATION_RESULTS.out.perm_results,
+            COMBINE_PERMUTATION_RESULTS.out.thresholds,
             ch_study_prefix
         )
 
         // MODULE 9: QTL Viewer Integration
         PREPARE_QTLVIEWER_DATA(
             CREATE_CROSS2_OBJECT.out.cross2_object,
-            PREPARE_GENOME_SCAN.out.genoprob,
-            PREPARE_GENOME_SCAN.out.kinship,
-            PREPARE_GENOME_SCAN.out.genetic_map,
-            GENOME_SCAN.out.scan_results,
+            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
+            PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+            COMBINE_BATCH_RESULTS.out.scan_results,
             IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
             ch_study_prefix
         )
@@ -231,11 +296,9 @@ workflow {
         )
 
         // Display results for Modules 5-8
-        PREPARE_GENOME_SCAN.out.validation_report.view { "Genome scan preparation report: $it" }
-        GENOME_SCAN.out.validation_report.view { "Genome scan report: $it" }
-        GENOME_SCAN.out.peaks.view { "Preliminary peaks found: $it" }
-        PERMUTATION_TEST.out.validation_report.view { "Permutation test report: $it" }
-        PERMUTATION_TEST.out.thresholds.view { "Significance thresholds: $it" }
+        PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }
+        COMBINE_PERMUTATION_RESULTS.out.validation_report.view { "Permutation test report: $it" }
+        COMBINE_PERMUTATION_RESULTS.out.thresholds.view { "Significance thresholds: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 

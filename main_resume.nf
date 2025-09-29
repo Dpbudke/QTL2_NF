@@ -123,9 +123,9 @@ include { PHENOTYPE_PROCESS } from './modules/01_phenotype_process.nf'
 include { GENOTYPE_PROCESS  } from './modules/02_genotype_process.nf'
 include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
 include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
-include { PREPARE_GENOME_SCAN } from './modules/05_prepare_genome_scan.nf'
-include { GENOME_SCAN; GENOME_SCAN_CHUNK; COMBINE_SCAN_RESULTS } from './modules/06_qtl_analysis.nf'
-include { PERMUTATION_TEST } from './modules/07_permutation_testing.nf'
+include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
+include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
+include { PERMUTATION_SETUP; PERMUTATION_BATCH; COMBINE_PERMUTATION_RESULTS } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
@@ -156,6 +156,19 @@ def shouldRunStep(currentStep, resumeFrom) {
     def resumeIndex = stepOrder.indexOf(resumeFrom)
 
     return currentIndex >= resumeIndex
+}
+
+// Function to check if we should load files (step was skipped) or use process outputs (step ran)
+def shouldLoadFromFiles(currentStep, resumeFrom) {
+    if (!resumeFrom) return false
+
+    def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
+                    'genome_scan', 'permutation', 'significant_qtls', 'qtlviewer']
+
+    def currentIndex = stepOrder.indexOf(currentStep)
+    def resumeIndex = stepOrder.indexOf(resumeFrom)
+
+    return currentIndex < resumeIndex
 }
 
 /*
@@ -270,145 +283,194 @@ workflow {
             ch_cross2_object = Channel.fromPath(checkFileExists("${params.outdir}/04_cross2_creation/${params.study_prefix}_cross2.rds", "cross2 object"))
         }
 
-        // MODULE 5: Genome Scan Preparation
+        // MODULE 5: Genome Scan Preparation - set up channels based on resume logic
         if (shouldRunStep('prepare_scan', params.resume_from)) {
-            log.info "Running PREPARE_GENOME_SCAN"
-
-            PREPARE_GENOME_SCAN(
+            PREPARE_GENOME_SCAN_SETUP(
                 ch_cross2_object,
                 ch_study_prefix
             )
+            // Note: Removed .view operation to prevent channel consumption issues
+            // PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan preparation report: $it" }
 
-            ch_genoprob = PREPARE_GENOME_SCAN.out.genoprob
-            ch_kinship = PREPARE_GENOME_SCAN.out.kinship
-            ch_genetic_map = PREPARE_GENOME_SCAN.out.genetic_map
+            // Use outputs directly from Module 5 process
+            ch_genoprob = PREPARE_GENOME_SCAN_SETUP.out.genoprob
+            ch_alleleprob = PREPARE_GENOME_SCAN_SETUP.out.alleleprob
+            ch_kinship_loco = PREPARE_GENOME_SCAN_SETUP.out.kinship_loco
 
-            PREPARE_GENOME_SCAN.out.validation_report.view { "Genome scan preparation report: $it" }
+            // Make GENOME_SCAN_SETUP depend on Module 5 completion using a different output
+            ch_cross2_for_setup = PREPARE_GENOME_SCAN_SETUP.out.setup_report
+                .combine(ch_cross2_object)
+                .map { report, cross2 -> cross2 }
         } else {
-            log.info "Skipping PREPARE_GENOME_SCAN - loading from existing files"
+            // Load from existing files when Module 5 skipped
             ch_genoprob = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genoprob.rds", "genotype probabilities"))
-            ch_kinship = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_kinship_loco.rds", "kinship matrices"))
-            ch_genetic_map = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genetic_map.rds", "genetic map"))
+            ch_alleleprob = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_alleleprob.rds", "allele probabilities"))
+            ch_kinship_loco = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_kinship_loco.rds", "kinship matrices"))
+
+            // No dependency needed when Module 5 skipped
+            ch_cross2_for_setup = ch_cross2_object
         }
 
-        // MODULE 6: HPC Array Genome Scanning
+        // Check if genome scan should run or use existing results
         if (shouldRunStep('genome_scan', params.resume_from)) {
-            log.info "Running HPC Array Genome Scan with massive parallelization"
-
-            // Step 1: Coordinator - Create chunk information
-            GENOME_SCAN(
-                ch_cross2_object,
-                ch_genoprob,
-                ch_kinship,
+            // MODULE 6: Genome Scan Setup - now properly depends on Module 5 completion
+            GENOME_SCAN_SETUP(
+                ch_cross2_for_setup,
                 ch_study_prefix,
                 Channel.value(params.lod_threshold)
             )
 
-            // Step 2: Parse chunk info and create array jobs
-            chunk_info = GENOME_SCAN.out.chunk_info
-                .splitCsv(header: true)
-                .map { row ->
-                    tuple(row.chunk_id as Integer, row.pheno_start as Integer, row.pheno_end as Integer)
-                }
+            GENOME_SCAN_SETUP.out.summary.view { "Chunking summary: $it" }
 
-            // Step 3: Launch array jobs - one per chunk
-            GENOME_SCAN_CHUNK(
-                ch_cross2_object.first(),
-                ch_genoprob.first(),
-                ch_kinship.first(),
-                ch_study_prefix.first(),
-                chunk_info.map { it[0] },  // chunk_id
-                chunk_info.map { it[1] },  // pheno_start
-                chunk_info.map { it[2] }   // pheno_end
-            )
+            log.info "Running GENOME_SCAN_BATCH processes"
 
-            // Step 4: Combine all chunk results
-            COMBINE_SCAN_RESULTS(
-                GENOME_SCAN_CHUNK.out.chunk_results.collect(),
-                ch_cross2_object.first(),
-                ch_study_prefix.first(),
+            // Create batch IDs from batch file
+            GENOME_SCAN_SETUP.out.batch_file
+                .splitText()
+                .map { it.trim() }
+                .filter { !it.startsWith('batch_id') }
+                .map { it.split('\t')[0] }
+                .unique()
+                .set { ch_batch_ids }
+
+            // Process batches in parallel
+            GENOME_SCAN_BATCH(
+                ch_batch_ids,
+                ch_cross2_object,
+                ch_genoprob,
+                ch_alleleprob,
+                ch_kinship_loco,
+                GENOME_SCAN_SETUP.out.chunk_file,
+                GENOME_SCAN_SETUP.out.batch_file,
+                ch_study_prefix,
                 Channel.value(params.lod_threshold)
             )
 
-            ch_scan_results = COMBINE_SCAN_RESULTS.out.scan_results
-            ch_filtered_phenotypes = COMBINE_SCAN_RESULTS.out.filtered_phenotypes
+            // Combine all batch results
+            COMBINE_BATCH_RESULTS(
+                GENOME_SCAN_BATCH.out.batch_results.collect(),
+                GENOME_SCAN_BATCH.out.batch_peaks.collect(),
+                GENOME_SCAN_BATCH.out.batch_filtered_phenos.collect(),
+                GENOME_SCAN_BATCH.out.batch_log.collect(),
+                ch_study_prefix,
+                Channel.value(params.lod_threshold)
+            )
 
-            GENOME_SCAN.out.setup_report.view { "Array setup report: $it" }
-            COMBINE_SCAN_RESULTS.out.validation_report.view { "HPC array results: $it" }
-            COMBINE_SCAN_RESULTS.out.peaks.view { "Preliminary peaks found: $it" }
+            ch_scan_results = COMBINE_BATCH_RESULTS.out.scan_results
+            ch_peaks = COMBINE_BATCH_RESULTS.out.peaks
+            ch_filtered_phenotypes = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
+
         } else {
-            log.info "Skipping HPC Array Genome Scan - loading from existing files"
+            log.info "Skipping GENOME_SCAN_BATCH - loading from existing files"
+
+            // Load existing combined results
             ch_scan_results = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_scan_results.rds", "scan results"))
+            ch_peaks = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_all_peaks.csv", "peaks file"))
             ch_filtered_phenotypes = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt", "filtered phenotypes"))
         }
 
-        // MODULE 7: Permutation Testing
-        if (shouldRunStep('permutation', params.resume_from)) {
-            log.info "Running PERMUTATION_TEST"
+        // Display results (conditional based on whether batch was run)
+        if (shouldRunStep('genome_scan', params.resume_from)) {
+            COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
+            COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
+        }
 
-            PERMUTATION_TEST(
-                ch_cross2_object,
-                ch_genoprob,
-                ch_kinship,
+        // MODULE 7: Permutation Testing (Batched Approach)
+        if (shouldRunStep('permutation', params.resume_from)) {
+            log.info "Running PERMUTATION_BATCH processes"
+
+            // Setup permutation batching
+            PERMUTATION_SETUP(
                 ch_filtered_phenotypes,
                 ch_study_prefix,
                 Channel.value(params.lod_threshold)
             )
 
-            ch_perm_results = PERMUTATION_TEST.out.perm_results
-            ch_thresholds = PERMUTATION_TEST.out.thresholds
+            PERMUTATION_SETUP.out.summary.view { "Permutation chunking summary: $it" }
 
-            PERMUTATION_TEST.out.validation_report.view { "Permutation test report: $it" }
-            PERMUTATION_TEST.out.thresholds.view { "Significance thresholds: $it" }
+            // Create batch IDs from batch file
+            PERMUTATION_SETUP.out.batch_file
+                .splitText()
+                .map { it.trim() }
+                .filter { !it.startsWith('batch_id') }
+                .map { it.split('\t')[0] }
+                .unique()
+                .set { ch_perm_batch_ids }
+
+            // Process permutation batches in parallel
+            PERMUTATION_BATCH(
+                ch_perm_batch_ids,
+                ch_cross2_object,
+                ch_genoprob,
+                ch_kinship_loco,
+                PERMUTATION_SETUP.out.chunk_file,
+                PERMUTATION_SETUP.out.batch_file,
+                ch_study_prefix,
+                Channel.value(params.lod_threshold)
+            )
+
+            // Combine all permutation batch results
+            COMBINE_PERMUTATION_RESULTS(
+                PERMUTATION_BATCH.out.batch_perm_results.collect(),
+                PERMUTATION_BATCH.out.batch_thresholds.collect(),
+                PERMUTATION_BATCH.out.batch_log.collect(),
+                ch_study_prefix,
+                Channel.value(params.lod_threshold)
+            )
+
+            ch_perm_results = COMBINE_PERMUTATION_RESULTS.out.perm_results
+            ch_thresholds = COMBINE_PERMUTATION_RESULTS.out.thresholds
+
         } else {
-            log.info "Skipping PERMUTATION_TEST - loading from existing files"
+            log.info "Skipping PERMUTATION_BATCH - loading from existing files"
+
+            // Load existing permutation results
             ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_permutation_results.rds", "permutation results"))
             ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_significance_thresholds.csv", "significance thresholds"))
         }
 
-        // MODULE 8: Significant QTL Identification
-        if (shouldRunStep('significant_qtls', params.resume_from)) {
-            log.info "Running IDENTIFY_SIGNIFICANT_QTLS"
-
-            IDENTIFY_SIGNIFICANT_QTLS(
-                ch_cross2_object,
-                ch_scan_results,
-                ch_perm_results,
-                ch_thresholds,
-                ch_study_prefix
-            )
-
-            ch_significant_qtls = IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls
-
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
-            IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
-        } else {
-            log.info "Skipping IDENTIFY_SIGNIFICANT_QTLS - loading from existing files"
-            ch_significant_qtls = Channel.fromPath(checkFileExists("${params.outdir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs"))
+        // Display results (conditional based on whether permutation was run)
+        if (shouldRunStep('permutation', params.resume_from)) {
+            COMBINE_PERMUTATION_RESULTS.out.validation_report.view { "Permutation test report: $it" }
+            COMBINE_PERMUTATION_RESULTS.out.thresholds.view { "Significance thresholds: $it" }
         }
+
+        // MODULE 8: Significant QTL Identification
+        IDENTIFY_SIGNIFICANT_QTLS(
+            ch_cross2_object,
+            ch_scan_results,
+            ch_perm_results,
+            ch_thresholds,
+            ch_study_prefix
+        )
+
+        IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
+        IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 
         // MODULE 9: QTL Viewer Integration
-        if (shouldRunStep('qtlviewer', params.resume_from)) {
-            log.info "Running QTL Viewer setup"
-
-            PREPARE_QTLVIEWER_DATA(
-                ch_cross2_object,
-                ch_genoprob,
-                ch_kinship,
-                ch_genetic_map,
-                ch_scan_results,
-                ch_significant_qtls,
-                ch_study_prefix
-            )
-
-            SETUP_QTLVIEWER_DEPLOYMENT(
-                PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-                ch_study_prefix
-            )
-
-            PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-            SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+        if (shouldRunStep('prepare_scan', params.resume_from)) {
+            ch_genetic_map = PREPARE_GENOME_SCAN_SETUP.out.genetic_map
+        } else {
+            ch_genetic_map = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genetic_map.rds", "genetic map"))
         }
+
+        PREPARE_QTLVIEWER_DATA(
+            ch_cross2_object,
+            ch_genoprob,
+            ch_kinship_loco,
+            ch_genetic_map,
+            ch_scan_results,
+            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            ch_study_prefix
+        )
+
+        SETUP_QTLVIEWER_DEPLOYMENT(
+            PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
+            ch_study_prefix
+        )
+
+        PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
+        SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
 
     } else {
         log.info "Skipping genotype-dependent modules - no FinalReport files specified"
