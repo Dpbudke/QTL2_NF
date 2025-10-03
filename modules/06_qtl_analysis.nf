@@ -67,7 +67,7 @@ process GENOME_SCAN_BATCH {
     tag "Batch ${batch_id} for ${prefix}"
     publishDir "${params.outdir}/06_qtl_analysis/batches", mode: 'copy'
 
-    cpus 48
+    cpus 96
     memory '1.6 TB'
     time '12h'  // Time for one batch (10 chunks)
 
@@ -119,6 +119,37 @@ process GENOME_SCAN_BATCH {
     alleleprob <- readRDS("${alleleprob_file}")
     kinship <- readRDS("${kinship_file}")
 
+    # Prepare covariates (convert categorical to numeric)
+    if(!is.null(cross2\$covar)) {
+        # Remove coat_color if present (genetic phenotype, not a covariate)
+        covar_data <- cross2\$covar
+        if("coat_color" %in% colnames(covar_data)) {
+            covar_data <- covar_data[, !colnames(covar_data) %in% "coat_color", drop = FALSE]
+            log_message("Removed coat_color from covariates (genetic phenotype)")
+        }
+
+        # Build formula for all covariates
+        covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
+        addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+        log_message(paste("Additive covariates:", ncol(covar_data), "covariates expanded to", ncol(addcovar), "numeric columns"))
+    } else {
+        addcovar <- NULL
+        log_message("No additive covariates found")
+    }
+
+    # Get X chromosome covariates
+    Xcovar <- NULL
+    if("X" %in% names(cross2\$gmap)) {
+        tryCatch({
+            Xcovar <- get_x_covar(cross2)
+            if(!is.null(Xcovar)) {
+                log_message(paste("X chromosome covariates:", ncol(Xcovar), "columns"))
+            }
+        }, error = function(e) {
+            log_message(paste("Warning: Could not generate X covariates:", e\$message))
+        })
+    }
+
     # Load assignments
     chunk_assignments <- read.table("${chunk_file}", header = TRUE, sep = "\\t")
     batch_assignments <- read.table("${batch_file}", header = TRUE, sep = "\\t")
@@ -162,6 +193,8 @@ process GENOME_SCAN_BATCH {
                 genoprob = alleleprob,
                 pheno = pheno_subset,
                 kinship = kinship,
+                addcovar = addcovar,
+                Xcovar = Xcovar,
                 cores = 0  # Use all available cores
             )
 

@@ -40,7 +40,7 @@ def helpMessage() {
         Module 4: Cross2 object creation
         Module 5: Genome scan preparation (with increased resources)
         Module 6: HPC array-based genome scanning
-        Module 7: Permutation testing (1000 permutations)
+        Module 7: Chunked permutation testing (DO_Pipe approach - 1000 permutations)
         Module 8: Significant QTL identification
         Module 9: QTL Viewer data preparation and Docker deployment
     
@@ -103,7 +103,8 @@ include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
 include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
 include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
 include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
-include { PERMUTATION_SETUP; PERMUTATION_BATCH; COMBINE_PERMUTATION_RESULTS } from './modules/07_permutation_testing.nf'
+include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
+include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
@@ -230,52 +231,51 @@ workflow {
         COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
         COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
 
-        // MODULE 7: Permutation Testing (Batched Approach)
-        // Setup permutation batching
-        PERMUTATION_SETUP(
-            COMBINE_BATCH_RESULTS.out.filtered_phenotypes,
-            ch_study_prefix,
-            Channel.value(params.lod_threshold)
-        )
+        // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
+        def filtered_phenos_ch
+        if (params.qtl_region != null) {
+            log.info "Filtering QTL peaks to genomic region: ${params.qtl_region}"
 
-        PERMUTATION_SETUP.out.summary.view { "Permutation chunking summary: $it" }
+            FILTER_PEAKS_BY_REGION(
+                COMBINE_BATCH_RESULTS.out.peaks,
+                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+                Channel.fromPath(params.gtf_file),
+                ch_study_prefix,
+                Channel.value(params.qtl_region)
+            )
 
-        // Create batch IDs from batch file
-        PERMUTATION_SETUP.out.batch_file
-            .splitText()
-            .map { it.trim() }
-            .filter { !it.startsWith('batch_id') }
-            .map { it.split('\t')[0] }
-            .unique()
-            .set { ch_perm_batch_ids }
+            FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
+            filtered_phenos_ch = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
+        } else {
+            log.info "No regional filtering - using all LOD-filtered phenotypes"
+            filtered_phenos_ch = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
+        }
 
-        // Process permutation batches in parallel
-        PERMUTATION_BATCH(
-            ch_perm_batch_ids,
+        // MODULE 7: Chunked Permutation Testing (DO_Pipe Approach with Smart Pre-filtering)
+        if (params.run_perm_benchmark) {
+            log.info "Running permutation testing WITH performance benchmarking (adds 30-40 min)"
+        } else {
+            log.info "Running permutation testing with fast setup (skipping benchmark)"
+        }
+
+        CHUNKED_PERMUTATION_TESTING(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             PREPARE_GENOME_SCAN_SETUP.out.genoprob,
             PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
-            PERMUTATION_SETUP.out.chunk_file,
-            PERMUTATION_SETUP.out.batch_file,
+            filtered_phenos_ch,
             ch_study_prefix,
-            Channel.value(params.lod_threshold)
-        )
-
-        // Combine all permutation batch results
-        COMBINE_PERMUTATION_RESULTS(
-            PERMUTATION_BATCH.out.batch_perm_results.collect(),
-            PERMUTATION_BATCH.out.batch_thresholds.collect(),
-            PERMUTATION_BATCH.out.batch_log.collect(),
-            ch_study_prefix,
-            Channel.value(params.lod_threshold)
+            Channel.value(params.lod_threshold),
+            Channel.value(params.run_perm_benchmark),
+            Channel.value(params.perm_per_chunk),
+            Channel.value(params.chunks_per_batch)
         )
 
         // MODULE 8: Significant QTL Identification
         IDENTIFY_SIGNIFICANT_QTLS(
             CREATE_CROSS2_OBJECT.out.cross2_object,
             COMBINE_BATCH_RESULTS.out.scan_results,
-            COMBINE_PERMUTATION_RESULTS.out.perm_results,
-            COMBINE_PERMUTATION_RESULTS.out.thresholds,
+            CHUNKED_PERMUTATION_TESTING.out.permutation_matrix,
+            CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds,
             ch_study_prefix
         )
 
@@ -297,8 +297,9 @@ workflow {
 
         // Display results for Modules 5-8
         PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }
-        COMBINE_PERMUTATION_RESULTS.out.validation_report.view { "Permutation test report: $it" }
-        COMBINE_PERMUTATION_RESULTS.out.thresholds.view { "Significance thresholds: $it" }
+        CHUNKED_PERMUTATION_TESTING.out.setup_log.view { "Permutation setup log: $it" }
+        CHUNKED_PERMUTATION_TESTING.out.aggregation_log.view { "Permutation aggregation log: $it" }
+        CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.view { "Significance thresholds: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 

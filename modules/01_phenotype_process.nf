@@ -270,8 +270,17 @@ process PHENOTYPE_PROCESS {
                  paste(colnames(covar_data), collapse = ", "))
         }
     }
+    # ALWAYS remove coat_color from covariates (it's a genetic phenotype, not a covariate)
+    if ("coat_color" %in% colnames(covar_data)) {
+        covar_data <- covar_data[, !colnames(covar_data) %in% "coat_color", drop = FALSE]
+        validation_log <- c(validation_log, "")
+        validation_log <- c(validation_log, "=== Covariate Filtering ===")
+        validation_log <- c(validation_log, "✓ Removed coat_color from covariates (genetic phenotype, not environmental)")
+        validation_log <- c(validation_log, paste("✓ Remaining covariates:", paste(colnames(covar_data), collapse = ", ")))
+    }
+
     validation_log <- c(validation_log, paste("  First 5 phenotype names:", paste(head(colnames(pheno_data), 5), collapse = ", ")))
-    
+
     # Validate required covariates for r/qtl2
     required_covars <- c("sex", "ngen")
     # Also check for alternative column names

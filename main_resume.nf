@@ -49,6 +49,7 @@ def helpMessage() {
                             cross2          - Start from cross2 object creation
                             prepare_scan    - Start from genome scan preparation
                             genome_scan     - Start from genome scanning
+                            regional_filter - Start from regional QTL filtering (requires --qtl_region)
                             permutation     - Start from permutation testing
                             significant_qtls - Start from QTL identification
                             qtlviewer       - Start from QTL Viewer setup
@@ -86,7 +87,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'permutation', 'significant_qtls', 'qtlviewer']
+                         'genome_scan', 'regional_filter', 'permutation', 'significant_qtls', 'qtlviewer']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -125,7 +126,8 @@ include { GENERATE_CONTROL_FILE } from './modules/03_control_file_generation.nf'
 include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
 include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
 include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
-include { PERMUTATION_SETUP; PERMUTATION_BATCH; COMBINE_PERMUTATION_RESULTS } from './modules/07_permutation_testing.nf'
+include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
+include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
@@ -150,7 +152,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'permutation', 'significant_qtls', 'qtlviewer']
+                    'genome_scan', 'regional_filter', 'permutation', 'significant_qtls', 'qtlviewer']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -296,6 +298,7 @@ workflow {
             ch_genoprob = PREPARE_GENOME_SCAN_SETUP.out.genoprob
             ch_alleleprob = PREPARE_GENOME_SCAN_SETUP.out.alleleprob
             ch_kinship_loco = PREPARE_GENOME_SCAN_SETUP.out.kinship_loco
+            ch_genetic_map = PREPARE_GENOME_SCAN_SETUP.out.genetic_map
 
             // Make GENOME_SCAN_SETUP depend on Module 5 completion using a different output
             ch_cross2_for_setup = PREPARE_GENOME_SCAN_SETUP.out.setup_report
@@ -306,6 +309,7 @@ workflow {
             ch_genoprob = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genoprob.rds", "genotype probabilities"))
             ch_alleleprob = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_alleleprob.rds", "allele probabilities"))
             ch_kinship_loco = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_kinship_loco.rds", "kinship matrices"))
+            ch_genetic_map = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genetic_map.rds", "genetic map"))
 
             // No dependency needed when Module 5 skipped
             ch_cross2_for_setup = ch_cross2_object
@@ -375,64 +379,104 @@ workflow {
             COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
         }
 
-        // MODULE 7: Permutation Testing (Batched Approach)
-        if (shouldRunStep('permutation', params.resume_from)) {
-            log.info "Running PERMUTATION_BATCH processes"
+        // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
+        def filtered_phenos_for_perm
 
-            // Setup permutation batching
-            PERMUTATION_SETUP(
-                ch_filtered_phenotypes,
+        if (shouldRunStep('regional_filter', params.resume_from)) {
+            // Regional filter step explicitly requested
+            if (params.qtl_region == null) {
+                log.error "ERROR: --resume_from regional_filter requires --qtl_region parameter"
+                exit 1
+            }
+
+            log.info "Running regional filtering on loaded peaks: ${params.qtl_region}"
+
+            FILTER_PEAKS_BY_REGION(
+                ch_peaks,
+                ch_genetic_map,
+                Channel.fromPath(params.gtf_file),
                 ch_study_prefix,
-                Channel.value(params.lod_threshold)
+                Channel.value(params.qtl_region)
             )
 
-            PERMUTATION_SETUP.out.summary.view { "Permutation chunking summary: $it" }
+            FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
+            filtered_phenos_for_perm = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
 
-            // Create batch IDs from batch file
-            PERMUTATION_SETUP.out.batch_file
-                .splitText()
-                .map { it.trim() }
-                .filter { !it.startsWith('batch_id') }
-                .map { it.split('\t')[0] }
-                .unique()
-                .set { ch_perm_batch_ids }
+        } else if (params.qtl_region != null) {
+            // Regional filtering enabled via parameter
+            def regional_filter_file = "${params.outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
 
-            // Process permutation batches in parallel
-            PERMUTATION_BATCH(
-                ch_perm_batch_ids,
-                ch_cross2_object,
+            if (shouldRunStep('genome_scan', params.resume_from)) {
+                // Genome scan just ran - filter using its output
+                log.info "Filtering QTL peaks to genomic region: ${params.qtl_region}"
+
+                FILTER_PEAKS_BY_REGION(
+                    COMBINE_BATCH_RESULTS.out.peaks,
+                    ch_genetic_map,
+                    Channel.fromPath(params.gtf_file),
+                    ch_study_prefix,
+                    Channel.value(params.qtl_region)
+                )
+
+                FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
+                filtered_phenos_for_perm = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
+
+            } else if (file(regional_filter_file).exists()) {
+                // Use existing filtered results
+                log.info "Using existing regional filtered phenotypes from: ${regional_filter_file}"
+                filtered_phenos_for_perm = Channel.fromPath(regional_filter_file)
+
+            } else {
+                log.info "No existing regional filter - using all LOD-filtered phenotypes"
+                filtered_phenos_for_perm = ch_filtered_phenotypes
+            }
+        } else {
+            log.info "No regional filtering - using all LOD-filtered phenotypes"
+            filtered_phenos_for_perm = ch_filtered_phenotypes
+        }
+
+        // MODULE 7: Chunked Permutation Testing (DO_Pipe Approach)
+        if (shouldRunStep('permutation', params.resume_from)) {
+            log.info "Running CHUNKED_PERMUTATION_TESTING (DO_Pipe approach)"
+
+            // Make permutation depend on genome scan completion if genome scan ran
+            if (shouldRunStep('genome_scan', params.resume_from)) {
+                // Use genome scan output as dependency trigger
+                ch_cross2_for_perm = COMBINE_BATCH_RESULTS.out.batch_summary
+                    .combine(ch_cross2_object)
+                    .map { summary, cross2 -> cross2 }
+            } else {
+                ch_cross2_for_perm = ch_cross2_object
+            }
+
+            CHUNKED_PERMUTATION_TESTING(
+                ch_cross2_for_perm,
                 ch_genoprob,
                 ch_kinship_loco,
-                PERMUTATION_SETUP.out.chunk_file,
-                PERMUTATION_SETUP.out.batch_file,
+                filtered_phenos_for_perm,
                 ch_study_prefix,
-                Channel.value(params.lod_threshold)
+                Channel.value(params.lod_threshold),
+                Channel.value(params.run_perm_benchmark),
+                Channel.value(params.perm_per_chunk),
+                Channel.value(params.chunks_per_batch)
             )
 
-            // Combine all permutation batch results
-            COMBINE_PERMUTATION_RESULTS(
-                PERMUTATION_BATCH.out.batch_perm_results.collect(),
-                PERMUTATION_BATCH.out.batch_thresholds.collect(),
-                PERMUTATION_BATCH.out.batch_log.collect(),
-                ch_study_prefix,
-                Channel.value(params.lod_threshold)
-            )
-
-            ch_perm_results = COMBINE_PERMUTATION_RESULTS.out.perm_results
-            ch_thresholds = COMBINE_PERMUTATION_RESULTS.out.thresholds
+            ch_perm_results = CHUNKED_PERMUTATION_TESTING.out.permutation_matrix
+            ch_thresholds = CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds
 
         } else {
-            log.info "Skipping PERMUTATION_BATCH - loading from existing files"
+            log.info "Skipping CHUNKED_PERMUTATION_TESTING - loading from existing files"
 
-            // Load existing permutation results
-            ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_permutation_results.rds", "permutation results"))
-            ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_significance_thresholds.csv", "significance thresholds"))
+            // Load existing permutation results (updated file names for chunked approach)
+            ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_fullPerm.rds", "permutation matrix"))
+            ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_permThresh.rds", "permutation thresholds"))
         }
 
         // Display results (conditional based on whether permutation was run)
         if (shouldRunStep('permutation', params.resume_from)) {
-            COMBINE_PERMUTATION_RESULTS.out.validation_report.view { "Permutation test report: $it" }
-            COMBINE_PERMUTATION_RESULTS.out.thresholds.view { "Significance thresholds: $it" }
+            CHUNKED_PERMUTATION_TESTING.out.setup_log.view { "Permutation setup log: $it" }
+            CHUNKED_PERMUTATION_TESTING.out.aggregation_log.view { "Permutation aggregation log: $it" }
+            CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.view { "Significance thresholds: $it" }
         }
 
         // MODULE 8: Significant QTL Identification
@@ -448,12 +492,6 @@ workflow {
         IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 
         // MODULE 9: QTL Viewer Integration
-        if (shouldRunStep('prepare_scan', params.resume_from)) {
-            ch_genetic_map = PREPARE_GENOME_SCAN_SETUP.out.genetic_map
-        } else {
-            ch_genetic_map = Channel.fromPath(checkFileExists("${params.outdir}/05_genome_scan_preparation/${params.study_prefix}_genetic_map.rds", "genetic map"))
-        }
-
         PREPARE_QTLVIEWER_DATA(
             ch_cross2_object,
             ch_genoprob,
