@@ -99,6 +99,7 @@ process PERM_SETUP {
 
 process PERM_BATCH_JOB {
     tag "Perm: \${phenotype_name} batch \${batch_num}/20"
+    publishDir "${params.outdir}/07_permutation_testing/batches", mode: 'copy'
 
     // Single phenotype, single batch
     // 48 CPUs and 100GB per batch (verified via testing: ~94GB average usage)
@@ -307,30 +308,25 @@ process PERM_AGGREGATE {
 
     log_message("Calculating permutation thresholds...")
 
-    # Calculate thresholds
-    permThresh <- apply(permMat, 2, quantile, probs = c(0.63, 0.95, 0.99))
-    rownames(permThresh) <- c("lod_4.0", "lod_6.0", "lod_7.0")
+    # Calculate thresholds at 4 significance levels
+    # 63% = suggestive (1 false positive per genome scan expected)
+    # 90% = alpha 0.10
+    # 95% = alpha 0.05
+    # 99% = alpha 0.01
+    permThresh <- apply(permMat, 2, quantile, probs = c(0.63, 0.90, 0.95, 0.99))
+    rownames(permThresh) <- c("63%", "90%", "95%", "99%")
 
     log_message("Threshold summary:")
-    log_message(paste("4.0 LOD (63%): median =", round(median(permThresh[1,]), 2)))
-    log_message(paste("6.0 LOD (95%): median =", round(median(permThresh[2,]), 2)))
-    log_message(paste("7.0 LOD (99%): median =", round(median(permThresh[3,]), 2)))
+    log_message(paste("Suggestive 63%: median =", round(median(permThresh[1,]), 2)))
+    log_message(paste("Alpha 0.10 90%: median =", round(median(permThresh[2,]), 2)))
+    log_message(paste("Alpha 0.05 95%: median =", round(median(permThresh[3,]), 2)))
+    log_message(paste("Alpha 0.01 99%: median =", round(median(permThresh[4,]), 2)))
 
-    # Filter phenotypes based on threshold
+    # Filter phenotypes - use the most stringent threshold
     lod_thresh <- ${lod_threshold}
-    if(lod_thresh == 4.0) {
-        thresh_row <- 1
-    } else if(lod_thresh == 6.0) {
-        thresh_row <- 2
-    } else if(lod_thresh == 7.0) {
-        thresh_row <- 3
-    } else {
-        log_message("Warning: Non-standard LOD threshold, using 7.0")
-        thresh_row <- 3
-    }
-
-    significant_phenos <- colnames(permMat)[permThresh[thresh_row,] >= lod_thresh]
-    log_message(paste("Phenotypes passing LOD", lod_thresh, "threshold:", length(significant_phenos)))
+    # Use the 99% (alpha 0.01) threshold for filtering
+    significant_phenos <- colnames(permMat)[permThresh[4,] >= lod_thresh]
+    log_message(paste("Phenotypes passing LOD", lod_thresh, "at 99% threshold:", length(significant_phenos)))
 
     # Save outputs
     saveRDS(permMat, file = "${study_prefix}_fullPerm.rds")
@@ -360,38 +356,80 @@ workflow CHUNKED_PERMUTATION_TESTING {
         chunks_per_batch  // Ignored - always 1
 
     main:
-        // Step 1: Setup - prepare filtered cross2 and phenotype list
+        // Check if batch results already exist in published directory
+        def batch_results_dir = "${params.outdir}/07_permutation_testing/batches"
+        def aggregated_perm_file = "${params.outdir}/07_permutation_testing/${params.study_prefix}_fullPerm.rds"
+
+        // Step 1: Setup - prepare filtered cross2 and phenotype list (always run to get phenotype count)
         PERM_SETUP(
             cross2_file,
             filtered_phenotypes_file,
             study_prefix
         )
 
-        // Step 2: Create channel for all batches
-        // For each phenotype, create 20 batch jobs (50 perms each)
-        phenotype_batches = PERM_SETUP.out.phenotype_list
-            .splitText()
-            .map { it.trim() }
-            .combine(Channel.from(1..20))  // 20 batches per phenotype (50 perms each)
+        if (file(aggregated_perm_file).exists()) {
+            log.info "Aggregated permutation results already exist - skipping batch jobs and aggregation"
+            ch_perm_matrix = Channel.fromPath(aggregated_perm_file)
+            ch_perm_thresholds = Channel.fromPath("${params.outdir}/07_permutation_testing/${params.study_prefix}_permThresh.rds")
+            ch_filtered_phenotypes = Channel.fromPath("${params.outdir}/07_permutation_testing/${params.study_prefix}_filtered_phenotypes_lod${params.lod_threshold}.txt")
+            ch_aggregation_log = Channel.fromPath("${params.outdir}/07_permutation_testing/${params.study_prefix}_aggregation_log.txt")
 
-        // Step 3: Execute permutation batch jobs (all submitted, 20 run in parallel)
-        PERM_BATCH_JOB(
-            study_prefix,                     // study_prefix (value channel)
-            phenotype_batches.map { it[0] },  // phenotype_name
-            phenotype_batches.map { it[1] }   // batch_num
-        )
+        } else if (file(batch_results_dir).exists() && file(batch_results_dir).list().size() > 0) {
+            log.info "Found existing batch results in ${batch_results_dir}"
+            log.info "Skipping PERM_BATCH_JOB - proceeding to aggregation"
 
-        // Step 4: Aggregate all results
-        PERM_AGGREGATE(
-            PERM_BATCH_JOB.out.perm_result.collect(),
-            study_prefix,
-            lod_threshold
-        )
+            // Read from published batch directory instead of channel collection
+            Channel.fromPath("${batch_results_dir}/${params.study_prefix}_*_batch_*.rds")
+                .collect()
+                .set { ch_batch_perm_files }
+
+            PERM_AGGREGATE(
+                ch_batch_perm_files,
+                study_prefix,
+                lod_threshold
+            )
+
+            ch_perm_matrix = PERM_AGGREGATE.out.full_perm_matrix
+            ch_perm_thresholds = PERM_AGGREGATE.out.perm_thresholds
+            ch_filtered_phenotypes = PERM_AGGREGATE.out.significant_phenotypes
+            ch_aggregation_log = PERM_AGGREGATE.out.aggregation_log
+
+        } else {
+            log.info "No existing batch results found - running full permutation workflow"
+
+            // Step 2: Create channel for all batches
+            // For each phenotype, create 20 batch jobs (50 perms each)
+            phenotype_batches = PERM_SETUP.out.phenotype_list
+                .splitText()
+                .map { it.trim() }
+                .combine(Channel.from(1..20))  // 20 batches per phenotype (50 perms each)
+
+            // Step 3: Execute permutation batch jobs (all submitted, 20 run in parallel)
+            PERM_BATCH_JOB(
+                study_prefix,                     // study_prefix (value channel)
+                phenotype_batches.map { it[0] },  // phenotype_name
+                phenotype_batches.map { it[1] }   // batch_num
+            )
+
+            // Step 4: Aggregate all results using standard channel collection
+            // The publishDir directive ensures results are saved to stable directory
+            PERM_AGGREGATE(
+                PERM_BATCH_JOB.out.perm_result.collect(),
+                study_prefix,
+                lod_threshold
+            )
+
+            ch_perm_matrix = PERM_AGGREGATE.out.full_perm_matrix
+            ch_perm_thresholds = PERM_AGGREGATE.out.perm_thresholds
+            ch_filtered_phenotypes = PERM_AGGREGATE.out.significant_phenotypes
+            ch_aggregation_log = PERM_AGGREGATE.out.aggregation_log
+        }
 
     emit:
-        permutation_matrix = PERM_AGGREGATE.out.full_perm_matrix
-        permutation_thresholds = PERM_AGGREGATE.out.perm_thresholds
-        filtered_phenotypes = PERM_AGGREGATE.out.significant_phenotypes
+        permutation_matrix = ch_perm_matrix
+        permutation_thresholds = ch_perm_thresholds
+        filtered_phenotypes = ch_filtered_phenotypes
+        filtered_cross2 = PERM_SETUP.out.filtered_cross2
         setup_log = PERM_SETUP.out.setup_log
-        aggregation_log = PERM_AGGREGATE.out.aggregation_log
+        aggregation_log = ch_aggregation_log
 }

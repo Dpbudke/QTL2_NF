@@ -34,21 +34,30 @@ process IDENTIFY_SIGNIFICANT_QTLS {
     cat("Loading scan results and significance thresholds...\\n")
 
     # Load required data
-    cross2 <- readRDS("${cross2_file}")
-    scan_results <- readRDS("${scan_results_file}")
+    cross2 <- readRDS("${cross2_file}")  # This is the filtered cross2 from module 7
+    scan_results_full <- readRDS("${scan_results_file}")
     perm_results <- readRDS("${perm_results_file}")
-    thresholds <- read.csv("${thresholds_file}", stringsAsFactors = FALSE)
+    permThresh <- readRDS("${thresholds_file}")
+
+    # Filter scan_results to match the phenotypes in filtered cross2
+    filtered_phenos <- colnames(cross2\$pheno)
+    scan_results <- scan_results_full[, filtered_phenos, drop=FALSE]
+
+    # Align the order of permThresh columns with scan_results columns
+    permThresh <- permThresh[, match(colnames(scan_results), colnames(permThresh))]
 
     validation_log <- c(validation_log, "=== Data Loading Complete ===")
-    validation_log <- c(validation_log, paste("✓ Scan results loaded:", paste(dim(scan_results), collapse=" x ")))
+    validation_log <- c(validation_log, paste("✓ Filtered cross2 loaded:", ncol(cross2\$pheno), "phenotypes,", nrow(cross2\$pheno), "individuals"))
+    validation_log <- c(validation_log, paste("✓ Scan results filtered:", paste(dim(scan_results), collapse=" x ")))
     validation_log <- c(validation_log, paste("✓ Permutation results loaded:", paste(dim(perm_results), collapse=" x ")))
-    validation_log <- c(validation_log, paste("✓ Significance thresholds loaded:", nrow(thresholds), "entries"))
+    validation_log <- c(validation_log, paste("✓ Significance thresholds loaded:", paste(dim(permThresh), collapse=" x ")))
+    validation_log <- c(validation_log, paste("✓ Column alignment verified:", sum(colnames(permThresh) == colnames(scan_results)), "of", ncol(scan_results), "phenotypes"))
     validation_log <- c(validation_log, "")
 
     # Initialize results data frame
     all_significant_qtls <- data.frame()
     qtl_counts <- data.frame(
-        significance_level = c("suggestive", "0.10", "0.05", "0.01"),
+        significance_level = rownames(permThresh),
         qtl_count = 0,
         phenotypes_with_qtls = 0,
         stringsAsFactors = FALSE
@@ -56,53 +65,39 @@ process IDENTIFY_SIGNIFICANT_QTLS {
 
     cat("Identifying significant QTLs for each significance level...\\n")
 
-    # Process each significance level
-    for (sig_level in c("suggestive", "0.10", "0.05", "0.01")) {
+    # Process each significance level (each row of permThresh)
+    for (i in 1:nrow(permThresh)) {
+        sig_level <- rownames(permThresh)[i]
         cat("Processing", sig_level, "significance level...\\n")
 
-        # Get thresholds for this significance level
-        level_thresholds <- thresholds[thresholds\$significance_level == sig_level, ]
+        # Get threshold vector for this significance level
+        thresh <- permThresh[i, ]
 
-        total_qtls <- 0
-        phenotypes_with_qtls <- 0
+        # Find peaks above this threshold
+        peaks <- find_peaks(scan_results, cross2\$gmap, threshold=thresh, drop=1.5)
 
-        # Process each phenotype
-        for (i in 1:nrow(level_thresholds)) {
-            pheno_name <- level_thresholds\$phenotype[i]
-            threshold <- level_thresholds\$lod_threshold[i]
-
-            # Find peaks for this phenotype at this significance level
-            if (pheno_name %in% colnames(scan_results)) {
-                # Create single-phenotype scan result
-                pheno_scan <- scan_results[, pheno_name, drop=FALSE]
-
-                # Find peaks above threshold
-                peaks <- find_peaks(pheno_scan, cross2\$gmap, threshold=threshold, drop=1.5)
-
-                if (nrow(peaks) > 0) {
-                    # Add metadata to peaks
-                    peaks\$study <- "${prefix}"
-                    peaks\$phenotype <- pheno_name
-                    peaks\$significance_level <- sig_level
-                    peaks\$alpha <- level_thresholds\$alpha[i]
-                    peaks\$threshold_used <- threshold
-
-                    # Reorder columns
-                    peaks <- peaks[, c("study", "phenotype", "significance_level", "alpha",
-                                      "threshold_used", "lodindex", "lodcolumn", "chr", "pos", "lod")]
-
-                    all_significant_qtls <- rbind(all_significant_qtls, peaks)
-                    total_qtls <- total_qtls + nrow(peaks)
-                    phenotypes_with_qtls <- phenotypes_with_qtls + 1
-                }
+        if (nrow(peaks) > 0) {
+            # Annotate each peak with ALL four threshold values for that phenotype
+            for (j in 1:nrow(permThresh)) {
+                desig <- paste0("signif_", gsub("%", "", rownames(permThresh)[j]))
+                peaks[[desig]] <- permThresh[j, ][match(peaks\$lodcolumn, colnames(permThresh))]
             }
+
+            # Add study and significance level metadata
+            peaks\$study <- "${prefix}"
+            peaks\$significance_level <- sig_level
+
+            all_significant_qtls <- rbind(all_significant_qtls, peaks)
+
+            # Count unique phenotypes at this level
+            phenos_at_level <- length(unique(peaks\$lodcolumn))
+            qtl_counts[qtl_counts\$significance_level == sig_level, "qtl_count"] <- nrow(peaks)
+            qtl_counts[qtl_counts\$significance_level == sig_level, "phenotypes_with_qtls"] <- phenos_at_level
+
+            validation_log <- c(validation_log, paste("✓", sig_level, "level:", nrow(peaks), "QTLs in", phenos_at_level, "phenotypes"))
+        } else {
+            validation_log <- c(validation_log, paste("✓", sig_level, "level: 0 QTLs"))
         }
-
-        # Update counts
-        qtl_counts[qtl_counts\$significance_level == sig_level, "qtl_count"] <- total_qtls
-        qtl_counts[qtl_counts\$significance_level == sig_level, "phenotypes_with_qtls"] <- phenotypes_with_qtls
-
-        validation_log <- c(validation_log, paste("✓", sig_level, "level:", total_qtls, "QTLs in", phenotypes_with_qtls, "phenotypes"))
     }
 
     # Write significant QTLs to file

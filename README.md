@@ -25,7 +25,7 @@ The pipeline automatically handles the preprocessing requirements for molecular 
 
 ## Pipeline Architecture
 
-The pipeline consists of 9 numbered modules organized into a sequential workflow that matches the results directory structure. This modular design enables precise resume capabilities and optimal resource allocation for large-scale QTL analysis:
+The pipeline consists of 9 numbered modules (plus optional Module 6b) organized into a sequential workflow that matches the results directory structure. This modular design enables precise resume capabilities and optimal resource allocation for large-scale QTL analysis:
 
 ### Module 1: Phenotype Processing (`01_phenotype_process.nf`)
 **Purpose**: Comprehensive validation and preparation of phenotype/covariate data according to r/qtl2 specifications with robust support for diverse molecular data types and experimental designs
@@ -109,60 +109,106 @@ The module processes specially formatted CSV files with the DO_Pipe convention:
 
 **Resources**: 16 CPUs, 256GB RAM, 12 hours
 
-### Module 6: HPC Array-Based QTL Analysis (`06_qtl_analysis.nf`)
-**Purpose**: Revolutionary HPC array-based genome scanning with intelligent chunking for massive datasets
+### Module 6: HPC Batch-Based QTL Analysis (`06_qtl_analysis.nf`)
+**Purpose**: Scalable batch processing architecture for genome-wide QTL scanning with intelligent resource management
 
 **Key Functions**:
-- **HPC Array Processing**: Coordinator + chunked scanning + results combination architecture
-- **Intelligent Chunking**: Processes phenotypes in chunks of ~500 for optimal parallelization
-- **Coordinator Process**: Creates array job configuration and chunk assignments (2 CPUs, 8GB, 1h)
-- **Chunk Processing**: Individual SLURM array jobs for parallel phenotype analysis (16 CPUs, 64GB, 4h each)
-- **Results Integration**: Combines chunk outputs into comprehensive genome scan results (4 CPUs, 32GB, 2h)
-- **Smart LOD Filtering**: Pre-filters phenotypes before expensive permutation testing
-- **Preliminary Peak Detection**: Identifies QTL peaks with LOD ≥ 3.0 for downstream analysis
+- **Batch Processing Architecture**: Three-tier workflow (Setup → Batch Processing → Results Combination)
+- **Intelligent Chunking**: Organizes phenotypes into chunks of ~200, batched into groups of 10 for optimal parallelization
+- **Setup Process**: Creates chunk and batch assignments, calculates optimal resource allocation (4 CPUs, 32GB, 1h)
+- **Batch Processing**: Processes 10 chunks per batch using alleleprob for efficient memory usage (96 CPUs, 1.6TB, 12h per batch)
+- **Results Integration**: Combines all batch outputs into comprehensive genome scan results (16 CPUs, 256GB, 2h)
+- **Smart LOD Filtering**: Pre-filters phenotypes using find_peaks() before expensive permutation testing
+- **Multiple Peak Detection**: Identifies ALL QTL peaks per phenotype (drop=1.5 LOD threshold) for comprehensive analysis
+- **Comprehensive Logging**: Detailed per-batch logs with timestamps, node information, and processing statistics
 
-**Technical Innovation**: Enables processing of datasets with 10,000+ phenotypes through massive parallelization while preventing memory bottlenecks
+**Technical Innovation**: Enables processing of datasets with 10,000+ phenotypes through batched parallel execution, preventing infrastructure bottlenecks while maintaining memory efficiency
 
-**Resources**: Coordinator (2 CPUs, 8GB), Per-chunk (16 CPUs, 64GB), Combination (4 CPUs, 32GB)
+**Resources**: Setup (4 CPUs, 32GB), Batch Processing (96 CPUs, 1.6TB), Combination (16 CPUs, 256GB)
 
-### Module 7: Permutation Testing (`07_permutation_testing.nf`)
-**Purpose**: Computationally optimized permutation testing with intelligent pre-filtering
+### Module 6b: Regional QTL Filtering (`06b_filter_peaks_by_region.nf`) **[OPTIONAL]**
+**Purpose**: Dramatically reduce permutation testing computational load by filtering QTL peaks to specific genomic regions
 
 **Key Functions**:
-- **Smart Pre-filtering**: Only processes phenotypes that pass LOD threshold from Module 6
-- **Massive Efficiency Gains**: Typically 70-90% reduction in computational workload
-- **Comprehensive Testing**: 1000 permutation rounds using scan1perm() for robust statistics
-- **Multi-level Thresholds**: Calculates significance thresholds at 0.63, 0.10, 0.05, 0.01 levels
-- **Empirical FDR Control**: False discovery rate calculation for multiple testing correction
-- **Resource Optimization**: Maximum resource allocation for intensive statistical computation
+- **GTF-Based Gene Mapping**: Cross-references phenotype IDs with Ensembl GTF annotations to identify gene chromosomal locations
+- **Flexible Region Specification**: Supports single regions (`chr12:81-91`), whole chromosomes (`chr12`), or multiple regions (`chr12:81-91;chr2:50-60`)
+- **Intelligent Overlap Detection**: Identifies phenotypes whose genes overlap with target regions (Mbp coordinates)
+- **Multi-Region Support**: Processes multiple genomic regions simultaneously for complex analyses
+- **Workload Reduction Reporting**: Quantifies computational savings (typically 70-95% reduction in phenotypes for permutation)
+- **Comprehensive Logging**: Detailed reports on matching statistics, unmatched phenotypes, and per-region summaries
+- **Seamless Integration**: Filtered phenotype list automatically passed to Module 7 when `--qtl_region` parameter is specified
 
-**Resources**: 48 CPUs, 1TB RAM, 72 hours
+**Use Cases**:
+- **Targeted eQTL Analysis**: Focus on cis-eQTLs for genes in specific chromosomal regions
+- **Candidate Region Investigation**: Deep analysis of known QTL hotspots or disease-associated loci
+- **Trans-band Exploration**: Examine trans-regulation from specific genomic regions
+- **Resource-Constrained Studies**: Maximize statistical power while minimizing computational time
+
+**Example**: For a chr12:81-91 Mbp region filter on 13,374 phenotypes, typically reduces to ~300-500 target phenotypes, achieving 96-98% workload reduction for permutation testing
+
+**Resources**: 4 CPUs, 16GB RAM, 30 minutes
+
+### Module 7: Simplified Batch Permutation Testing (`07_permutation_testing.nf`)
+**Purpose**: Efficient single-phenotype permutation testing with fork-based parallelism and intelligent pre-filtering
+
+**Key Functions**:
+- **Smart Pre-filtering**: Only processes phenotypes passing LOD threshold from Module 6 or regional filtering from Module 6b
+- **Simplified Batch Architecture**: 1 batch = 1 phenotype × 50 permutations = 1 SLURM job (20 batches per phenotype = 1,000 total permutations)
+- **Fork-Based Parallelism**: Uses scan1perm() with cores=48 and fork (NOT PSOCK) for efficient memory sharing on Linux
+- **Memory Optimization**: Alleleprob-based (2.1GB) instead of genoprob (9.3GB) for 4.4x memory reduction
+- **Real-Time Progress**: Individual batch completion enables live monitoring of permutation progress
+- **Automatic Resume**: Detects existing batch results and skips completed permutation jobs
+- **Filtered Cross2 Object**: Creates phenotype-filtered cross2 for downstream Module 8 analysis
+- **Multi-level Thresholds**: Calculates significance thresholds at 63%, 90%, 95%, 99% quantiles
+- **Comprehensive Aggregation**: Quilts together all batch results into final permutation matrix (1000 perms × N phenotypes)
+
+**Efficiency Achievement**: LOD threshold of 7.0 typically reduces permutation workload by 70-90%; regional filtering can achieve 95-98% reduction
+
+**Resources**: Setup (4 CPUs, 32GB, 10m), Batch Jobs (48 CPUs, 100GB, 1h each), Aggregation (4 CPUs, 32GB, 1h)
 
 ### Module 8: Significant QTL Identification (`08_identify_significant_qtls.nf`)
-**Purpose**: Final QTL identification and comprehensive summary generation
+**Purpose**: Statistical QTL calling using empirical permutation thresholds with multi-level significance classification
 
 **Key Functions**:
-- **Threshold Application**: Applies empirical significance thresholds from permutation testing
-- **Multi-level Classification**: Categorizes QTLs by significance levels (0.63, 0.10, 0.05, 0.01)
-- **Comprehensive Summaries**: Generates detailed QTL lists with genomic positions and effect sizes
-- **High-priority Identification**: Flags exceptional QTLs with LOD ≥ 10 for priority follow-up
-- **Statistical Reporting**: Summary statistics, chromosome distribution, and validation metrics
-- **Publication-ready Output**: Formatted tables and visualizations for scientific reporting
+- **Filtered Cross2 Integration**: Uses phenotype-filtered cross2 object from Module 7 for precise QTL identification
+- **Threshold Application**: Applies phenotype-specific empirical significance thresholds from permutation testing
+- **Multi-level Classification**: Identifies QTLs at four significance levels: 63% (suggestive), 90% (α=0.10), 95% (α=0.05), 99% (α=0.01)
+- **Multiple Peaks Per Phenotype**: Captures all significant peaks using find_peaks() with drop=1.5 LOD criterion
+- **Comprehensive Annotation**: Annotates each QTL with all four threshold values for the corresponding phenotype
+- **Chromosome Distribution**: Summarizes QTL counts across all chromosomes
+- **High-Priority Flagging**: Identifies exceptional QTLs with LOD ≥ 10 for immediate follow-up
+- **Publication-Ready Output**: CSV format with phenotype, chromosome, position, LOD score, and significance annotations
 
-**Resources**: 8 CPUs, 64GB RAM, 4 hours
+**Output Files**:
+- **significant_qtls.csv**: Complete QTL catalog with multi-level significance annotations
+- **qtl_summary.txt**: Statistical overview, chromosome distribution, and top QTL highlights
+- **validation_report.txt**: Processing log with data alignment verification and QTL counts
 
-### Module 9: QTL Viewer Integration (`09_qtl_viewer.nf`)
-**Purpose**: Interactive QTL visualization and portable deployment system
+**Resources**: 8 CPUs, 128GB RAM, 4 hours
+
+### Module 9: QTL Viewer Data Preparation (`09_qtl_viewer.nf`)
+**Purpose**: Automated conversion to QTL Viewer RData format with complete Docker deployment package for local visualization
 
 **Key Functions**:
-- **QTL Viewer Integration**: Converts results to official QTL Viewer RData format
-- **Portable Deployment**: Creates complete Docker deployment package with one-command startup
-- **Interactive Visualization**: LOD score plots, founder effect plots, SNP association mapping
-- **Cross-platform Compatibility**: Deployable on HPC, local machines, or cloud platforms
-- **Database Integration**: Self-contained database for rapid phenotype and QTL querying
-- **User-friendly Interface**: Web-based interface accessible via http://localhost:8000
+- **Intelligent Cross2 Detection**: Auto-detects and prioritizes regionally-filtered cross2 (Module 7) over full cross2 (Module 4)
+- **QTL Viewer Format Conversion**: Transforms r/qtl2 objects into official QTL Viewer RData structure
+- **Required Elements Assembly**: Creates ensembl.version, genoprobs, K (kinship), map, markers, and dataset.phenotypes objects
+- **Phenotype Annotations**: Generates complete phenotype metadata with data types and categories
+- **Sample Annotations**: Integrates covariate information and sample identifiers
+- **Covariate Matrix**: Prepares model matrix for interactive QTL Viewer covariate selection
+- **LOD Peaks Integration**: Incorporates significant QTLs from Module 8 for interactive exploration
+- **Docker Deployment Package**: Creates docker-compose.yml, startup script, README, and data directory structure
+- **MGI Database Integration**: Automatically sources SQLite database for founder SNP annotation (tries local cache, then Figshare download)
+- **Portable Deployment**: Complete self-contained package downloadable to local machine for visualization
 
-**Resources**: 8 CPUs, 64GB RAM, 2 hours
+**Deployment Features**:
+- **One-Command Startup**: `./start_qtlviewer.sh` launches both qtl2rest (API) and qtl2web (interface)
+- **Dual-Container Architecture**: qtl2rest (port 8001) + qtl2web (port 8000) with bridge networking
+- **Interactive Web Interface**: http://localhost:8000 for LOD plots, effect plots, and SNP associations
+- **REST API Access**: http://localhost:8001 for programmatic data queries
+- **Cross-Platform**: Works on any system with Docker Desktop (Windows, Mac, Linux)
+
+**Resources**: PREPARE_QTLVIEWER_DATA (16 CPUs, 256GB, 6h), SETUP_QTLVIEWER_DEPLOYMENT (2 CPUs, 16GB, 1h)
 
 ### Optional: DO Sample Mixup QC (`do_mixup_qc.nf`)
 **Purpose**: Standalone quality control module for detecting sample mix-ups in Diversity Outbred populations
@@ -297,6 +343,39 @@ nextflow run main.nf \
   --finalreport_files 'Data/FinalReport_Batch*.txt' \
   --study_prefix DOchln_multibatch \
   --lod_threshold 7.0 \
+  -profile standard
+```
+
+**Regional QTL Filtering (Module 6b - Targeted Analysis)**:
+```bash
+# Single genomic region (chr12:81-91 Mbp)
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_chr12_cis \
+  --lod_threshold 7.0 \
+  --qtl_region "chr12:81-91" \
+  --gtf_file Data/Mus_musculus.GRCm39.105.gtf.gz \
+  -profile standard
+
+# Multiple genomic regions
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_multiregion \
+  --lod_threshold 7.0 \
+  --qtl_region "chr12:81-91;chr2:50-60;chr7:10-20" \
+  --gtf_file Data/Mus_musculus.GRCm39.105.gtf.gz \
+  -profile standard
+
+# Whole chromosome analysis
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_chr12_all \
+  --lod_threshold 7.0 \
+  --qtl_region "chr12" \
+  --gtf_file Data/Mus_musculus.GRCm39.105.gtf.gz \
   -profile standard
 ```
 
@@ -494,25 +573,37 @@ For molecular phenotypes (eQTL, mQTL analyses), the preparatory R Markdown workf
 ### Resource Optimization Strategy
 The pipeline implements intelligent resource allocation optimized for each computational phase:
 
-- **Module 1 (Phenotype)**: 1 CPU, 2GB RAM, 1h - Lightweight data validation
-- **Module 2 (Genotype)**: 2 CPUs, 64GB RAM, 4h - Memory-intensive genotype processing
+- **Module 1 (Phenotype)**: 4 CPUs, 10GB RAM, 1h - Data validation and sample filtering
+- **Module 2 (Genotype)**: 8 CPUs, 128GB RAM, 4h - Memory-intensive genotype processing
 - **Module 3 (Control Files)**: 2 CPUs, 4GB RAM, 2h - Metadata and configuration generation
 - **Module 4 (Cross2 Creation)**: 2 CPUs, 4GB RAM, 2h - r/qtl2 object creation
-- **Module 5 (Scan Preparation)**: 32 CPUs, 128GB RAM, 8h - High-performance probability calculation
-- **Module 6 (QTL Analysis)**: HPC array architecture with three-tier resource allocation
-- **Module 7 (Permutation)**: 48 CPUs, 1TB RAM, 72h - Maximum resources for statistical validation
-- **Module 8 (QTL Identification)**: 8 CPUs, 64GB RAM, 4h - Results processing and summary
-- **Module 9 (QTL Viewer)**: 8 CPUs, 64GB RAM, 2h - Visualization data preparation
+- **Module 5 (Scan Preparation)**: 128 CPUs, 128GB RAM, 4h - Massively parallel genotype probability calculation
+- **Module 6 (QTL Analysis)**: Batch processing architecture with three-tier resource allocation
+- **Module 6b (Regional Filter)**: 4 CPUs, 16GB RAM, 30m - Optional GTF-based phenotype filtering
+- **Module 7 (Permutation)**: Simplified batch architecture with fork-based parallelism
+- **Module 8 (QTL Identification)**: 8 CPUs, 128GB RAM, 4h - Results processing and multi-level classification
+- **Module 9 (QTL Viewer)**: 16 CPUs, 256GB RAM, 6h - QTL Viewer data conversion and deployment package
 
-### HPC Array Processing Architecture (Module 6)
+### HPC Batch Processing Architecture (Module 6)
 ```bash
-# Three-tier resource allocation for massive scalability
-Coordinator Job:    2 CPUs,   8GB RAM,  1h    # Array setup and configuration
-Per-chunk Job:     16 CPUs,  64GB RAM,  4h    # Individual phenotype chunks (parallel)
-Combination Job:    4 CPUs,  32GB RAM,  2h    # Results integration and validation
+# Three-tier batch processing for scalability and infrastructure stability
+Setup Job:          4 CPUs,   32GB RAM,   1h    # Chunk and batch assignments
+Per-batch Job:     96 CPUs,  1.6TB RAM,  12h    # Process 10 chunks (2000 phenotypes) per batch
+Combination Job:   16 CPUs,  256GB RAM,   2h    # Results integration and peak detection
 
-# Example: 13,374 phenotypes processed as 27 chunks of ~500 phenotypes each
-# Total parallel processing: 27 simultaneous SLURM array jobs
+# Example: 13,374 phenotypes → 67 chunks → 8 batches (processed in parallel)
+# Batch submission prevents scheduler infrastructure issues
+```
+
+### Simplified Permutation Architecture (Module 7)
+```bash
+# Single-phenotype batch design for real-time progress monitoring
+Setup Job:          4 CPUs,   32GB RAM,  10m    # Phenotype filtering and cross2 subsetting
+Per-batch Job:     48 CPUs,  100GB RAM,   1h    # 1 batch = 1 phenotype × 50 permutations (fork parallelism)
+Aggregation Job:    4 CPUs,   32GB RAM,   1h    # Combine all batches → 1000 perms per phenotype
+
+# Example: 47 phenotypes × 20 batches = 940 total batches (1000 permutations per phenotype)
+# Real-time completion monitoring and automatic resume capability
 ```
 
 ### Performance Achievements
@@ -553,31 +644,52 @@ results/
 │   ├── {prefix}_kinship.rds         # LOCO kinship matrices
 │   ├── {prefix}_genetic_map.rds     # High-resolution genetic map
 │   └── preparation_validation_report.txt
-├── 06_qtl_analysis/                 # HPC array genome scan results
-│   ├── chunks/                      # Individual chunk processing results
-│   │   ├── chunk_1_results.rds      # Scan results for phenotype chunk 1
-│   │   ├── chunk_2_results.rds      # Scan results for phenotype chunk 2
-│   │   └── ...                      # Additional chunk results
-│   ├── chunk_info.txt              # Array job configuration and phenotype assignments
-│   ├── {prefix}_scan_results.rds    # Combined comprehensive scan results
-│   ├── {prefix}_scan_peaks.csv      # Preliminary peaks (LOD ≥ 3.0)
-│   └── genome_scan_validation_report.txt
-├── 07_permutation_testing/          # Statistical significance determination
-│   ├── {prefix}_permutation_results.rds  # Complete permutation test results
-│   ├── {prefix}_significance_thresholds.csv  # Multi-level significance thresholds
-│   ├── filtered_phenotypes.txt      # Phenotypes meeting LOD threshold criteria
-│   └── permutation_validation_report.txt
+├── 06_qtl_analysis/                 # HPC batch genome scan results
+│   ├── batches/                      # Individual batch processing results
+│   │   ├── {prefix}_batch1_results.rds      # Scan results for batch 1 (10 chunks)
+│   │   ├── {prefix}_batch1_peaks.csv        # Peaks found in batch 1
+│   │   ├── {prefix}_batch1_filtered_phenos.txt  # Phenotypes with peaks in batch 1
+│   │   ├── {prefix}_batch1_log.txt          # Batch 1 processing log
+│   │   └── ...                              # Additional batch results
+│   ├── {prefix}_pheno_chunks.txt            # Chunk assignments (chunk_id, phenotype)
+│   ├── {prefix}_batch_assignments.txt       # Batch assignments (batch_id, chunk_id)
+│   ├── {prefix}_chunk_summary.txt           # Chunking strategy summary
+│   ├── {prefix}_scan_results.rds            # Combined comprehensive scan results
+│   ├── {prefix}_all_peaks.csv               # All preliminary peaks (LOD ≥ threshold)
+│   ├── {prefix}_filtered_phenotypes.txt     # Phenotypes passing LOD filter
+│   └── {prefix}_batch_processing_summary.txt  # Batch processing summary
+├── 06b_regional_filtering/          # Optional regional QTL filtering (if --qtl_region specified)
+│   ├── {prefix}_regional_filtered_phenotypes.txt  # Phenotypes in target region(s)
+│   ├── {prefix}_filtered_peaks.csv          # Peaks with gene location annotations
+│   └── {prefix}_regional_filtering_report.txt  # Filtering statistics and workload reduction
+├── 07_permutation_testing/          # Simplified batch permutation testing
+│   ├── batches/                     # Individual batch permutation results
+│   │   ├── {prefix}_phenotype1_batch_1.rds   # Permutation batch 1 for phenotype 1
+│   │   ├── {prefix}_phenotype1_batch_2.rds   # Permutation batch 2 for phenotype 1
+│   │   └── ...                               # Additional batch results (20 batches × N phenotypes)
+│   ├── {prefix}_filtered_cross2.rds         # Phenotype-filtered cross2 object
+│   ├── {prefix}_phenotype_list.txt          # List of phenotypes for permutation
+│   ├── {prefix}_setup_log.txt               # Permutation setup log
+│   ├── {prefix}_fullPerm.rds                # Complete permutation matrix (1000 × N phenotypes)
+│   ├── {prefix}_permThresh.rds              # Multi-level significance thresholds (63%, 90%, 95%, 99%)
+│   ├── {prefix}_filtered_phenotypes_lod{threshold}.txt  # Phenotypes passing final threshold
+│   └── {prefix}_aggregation_log.txt         # Permutation aggregation log
 ├── 08_significant_qtls/             # Final QTL identification and analysis
 │   ├── {prefix}_significant_qtls.csv    # Comprehensive significant QTL list
 │   ├── {prefix}_qtl_summary.txt     # Summary statistics and distributions
 │   ├── {prefix}_high_priority_qtls.csv  # Exceptional QTLs (LOD ≥ 10)
 │   └── qtl_identification_report.txt
-├── 09_qtl_viewer/                   # Interactive visualization deployment
-│   ├── qtlviewer_data.RData        # QTL Viewer compatible data package
-│   ├── docker-compose.yml          # Container orchestration configuration
-│   ├── start_qtlviewer.sh          # One-command deployment script
-│   ├── instructions.txt            # Detailed deployment instructions
-│   └── qtlviewer_conversion_report.txt
+├── 09_qtl_viewer_data/              # QTL Viewer deployment package
+│   ├── {prefix}_qtlviewer.RData    # QTL Viewer compatible RData file
+│   ├── qtlviewer_conversion_report.txt  # Data conversion validation report
+│   ├── docker-compose.yml          # Docker container orchestration
+│   ├── start_qtlviewer.sh          # One-command deployment script (executable)
+│   ├── README_qtlviewer.md         # Comprehensive deployment instructions
+│   └── data/                       # QTL Viewer data directory
+│       ├── rdata/                  # RData files for QTL Viewer
+│       │   └── {prefix}.RData      # Study-specific QTL data
+│       └── sqlite/                 # SQLite databases
+│           └── ccfoundersnps.sqlite  # MGI mouse gene annotations and founder SNPs
 └── pipeline_info/                   # Execution monitoring and reporting
     ├── execution_timeline.html      # Interactive execution timeline
     ├── execution_report.html        # Comprehensive resource usage report
@@ -587,28 +699,47 @@ results/
 
 ### QTL Viewer Deployment
 
-Module 9 creates a **fully portable QTL Viewer deployment** accessible at `http://localhost:8000`:
+Module 9 creates a **fully portable QTL Viewer deployment package** with auto-detection of filtered vs. full cross2 objects:
 
 ```bash
-# On HPC where pipeline completed
-cd results/09_qtl_viewer/
+# Enable QTL Viewer during pipeline run (optional - designed for local deployment)
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln \
+  --run_qtlviewer \
+  -profile standard
+
+# Download entire deployment directory to local machine
+scp -r user@hpc:path/to/results/09_qtl_viewer_data/ ~/my_qtl_study/
+cd ~/my_qtl_study/09_qtl_viewer_data/
+
+# One-command local deployment
 ./start_qtlviewer.sh
 
-# Download to local machine for portable analysis
-scp -r user@hpc:path/to/results/09_qtl_viewer/ ~/my_qtl_study/
-cd ~/my_qtl_study/09_qtl_viewer/
-./start_qtlviewer.sh
-
-# Alternative: Direct Docker deployment
+# Alternative: Direct Docker Compose deployment
 docker-compose up -d
 ```
 
-**Features**:
-- Interactive LOD score visualization
-- Founder strain effect plots
-- High-resolution SNP association mapping
-- Cross-phenotype correlation analysis
-- Mediation analysis capabilities
+**Intelligent Cross2 Detection**:
+- **Prioritizes filtered cross2**: Uses `{prefix}_filtered_cross2.rds` from Module 7 if regional filtering was applied
+- **Falls back to full cross2**: Uses `{prefix}_cross2.rds` from Module 4 if no filtering was performed
+- **Automatic selection**: No manual configuration required - pipeline detects and uses appropriate dataset
+
+**QTL Viewer Features**:
+- **Interactive LOD Score Visualization**: Chromosome-wide LOD plots with zoom and pan capabilities
+- **Founder Strain Effect Plots**: Visualize allelic effects for each DO founder strain
+- **High-Resolution SNP Association**: Fine-mapping with MGI founder SNP database integration
+- **Phenotype Browser**: Search and filter phenotypes with interactive data tables
+- **Covariate Selection**: Dynamic covariate adjustment through web interface
+- **REST API Access**: Programmatic data queries at http://localhost:8001
+
+**Deployment Package Contents**:
+- **{prefix}_qtlviewer.RData**: Complete QTL Viewer data bundle with genoprobs, kinship, markers, and results
+- **docker-compose.yml**: Pre-configured dual-container setup (qtl2rest + qtl2web)
+- **start_qtlviewer.sh**: Automated startup script with health checks and status reporting
+- **README_qtlviewer.md**: Comprehensive local deployment instructions
+- **data/ directory**: Organized RData and SQLite database files for QTL Viewer containers
 
 ## Configuration
 
@@ -664,11 +795,16 @@ apptainer {
 - `--sample_filter`: JSON string for sample subsetting (e.g., '{"Sex":["male"],"Diet":["hc"]}')
 - `--test_mode`: Development mode - process chromosome 2 only (default: false)
 
+**Regional Filtering Parameters (Module 6b)**:
+- `--qtl_region`: Genomic region(s) for targeted QTL analysis (e.g., 'chr12:81-91' or 'chr12:81-91;chr2:50-60')
+- `--gtf_file`: Path to Ensembl GTF annotation for gene location mapping (default: 'Data/Mus_musculus.GRCm39.105.gtf.gz')
+
 **Resume Parameters**:
 - `--resume_from`: Resume from specific module (01-09, or module names)
 
 **Quality Control Parameters**:
 - `--run_mixup_qc`: Enable standalone sample mixup detection (default: false)
+- `--run_qtlviewer`: Enable QTL Viewer data preparation and deployment package creation (default: false)
 
 **Example Parameter Sets**:
 ```bash
@@ -698,17 +834,38 @@ Intelligent pre-filtering dramatically reduces computational requirements:
 
 **Efficiency Impact**: LOD threshold of 7.0 typically reduces permutation workload by 70-90%
 
+### Regional Filtering Strategy (Module 6b)
+Optional targeted analysis for dramatic computational savings:
+
+- **Single Region (`chr12:81-91`)**: Focus on specific genomic interval (e.g., cis-eQTL analysis)
+- **Multiple Regions (`chr12:81-91;chr2:50-60`)**: Analyze multiple hotspots simultaneously
+- **Whole Chromosome (`chr12`)**: Entire chromosome analysis with reduced dataset
+
+**Workload Reduction Examples**:
+- **chr12:81-91 Mbp** on 13,374 phenotypes → ~300-500 target phenotypes (**96-98% reduction**)
+- **chr12 full** on 13,374 phenotypes → ~1,100-1,300 target phenotypes (**90-92% reduction**)
+- Combined with LOD threshold filtering for **maximum efficiency**
+
+**Use When**:
+- Investigating cis-acting regulatory variants in specific regions
+- Validating known QTL hotspots with deep permutation testing
+- Computational resources are limited but specific regions are of high biological interest
+- Trans-band analysis from specific genomic loci
+
 ### Memory Management Strategy
-- **Chunked Processing**: HPC array jobs prevent memory bottlenecks in large datasets
-- **Progressive Resource Allocation**: Resources scale with computational complexity
-- **Smart Memory Usage**: Module 5 uses 128GB for probability calculations, Module 7 uses 1TB for permutations
-- **Container Optimization**: Single container approach reduces overhead and complexity
+- **Batch Processing**: Module 6 processes 10 chunks per batch to prevent infrastructure bottlenecks
+- **Alleleprob Efficiency**: Module 7 uses alleleprob (2.1GB) instead of genoprob (9.3GB) for 4.4x memory reduction
+- **Fork-Based Parallelism**: Linux fork parallelism enables memory sharing across cores (no PSOCK serialization overhead)
+- **Progressive Resource Allocation**: Resources scale with computational complexity across pipeline stages
+- **Smart Memory Usage**: Module 5 uses 128GB for probability calculations, Module 6 batches use 1.6TB, Module 7 batches use 100GB
+- **Container Optimization**: Single unified container (dpbudke/qtl2-pipeline:latest) reduces overhead and complexity
 
 ### Scalability Achievements
-- **Phenotype Capacity**: Successfully processes 10,000+ molecular traits
-- **Sample Capacity**: Handles 1,000+ samples with full genotype data
-- **Parallel Efficiency**: 27 simultaneous array jobs for 13,374 phenotypes
-- **Resource Efficiency**: Intelligent filtering reduces computational time by orders of magnitude
+- **Phenotype Capacity**: Successfully processes 10,000+ molecular traits with batch architecture
+- **Sample Capacity**: Handles 1,000+ samples with full genotype data (382 samples × 13,374 phenotypes tested)
+- **Batch Efficiency**: Module 6 processes ~67 chunks in ~8 parallel batches; Module 7 processes 940 permutation batches
+- **Regional Filtering**: Can reduce permutation workload by 96-98% for targeted genomic analyses
+- **Resource Efficiency**: Combined LOD threshold + regional filtering achieves >99% workload reduction when applicable
 
 
 ## Scientific Methodology and Integration

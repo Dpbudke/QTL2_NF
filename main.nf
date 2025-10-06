@@ -32,6 +32,7 @@ def helpMessage() {
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
+        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - local deployment only) [default: false]
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
@@ -42,7 +43,7 @@ def helpMessage() {
         Module 6: HPC array-based genome scanning
         Module 7: Chunked permutation testing (DO_Pipe approach - 1000 permutations)
         Module 8: Significant QTL identification
-        Module 9: QTL Viewer data preparation and Docker deployment
+        Module 9: QTL Viewer setup (OPTIONAL - use --run_qtlviewer, local deployment only)
     
     Example:
         nextflow run main.nf \\
@@ -233,6 +234,8 @@ workflow {
 
         // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
         def filtered_phenos_ch
+        def regional_filter_file = "${params.outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
+
         if (params.qtl_region != null) {
             log.info "Filtering QTL peaks to genomic region: ${params.qtl_region}"
 
@@ -246,8 +249,11 @@ workflow {
 
             FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
             filtered_phenos_ch = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
+        } else if (file(regional_filter_file).exists()) {
+            log.info "Using existing regional filtered phenotypes from previous run: ${regional_filter_file}"
+            filtered_phenos_ch = Channel.fromPath(regional_filter_file)
         } else {
-            log.info "No regional filtering - using all LOD-filtered phenotypes"
+            log.info "No regional filtering applied - using all LOD-filtered phenotypes"
             filtered_phenos_ch = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
         }
 
@@ -272,28 +278,42 @@ workflow {
 
         // MODULE 8: Significant QTL Identification
         IDENTIFY_SIGNIFICANT_QTLS(
-            CREATE_CROSS2_OBJECT.out.cross2_object,
+            CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
             COMBINE_BATCH_RESULTS.out.scan_results,
             CHUNKED_PERMUTATION_TESTING.out.permutation_matrix,
             CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds,
             ch_study_prefix
         )
 
-        // MODULE 9: QTL Viewer Integration
-        PREPARE_QTLVIEWER_DATA(
-            CREATE_CROSS2_OBJECT.out.cross2_object,
-            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
-            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
-            PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
-            COMBINE_BATCH_RESULTS.out.scan_results,
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-            ch_study_prefix
-        )
+        // MODULE 9: QTL Viewer Integration (Optional - for local deployment only)
+        // NOTE: Module 9 is designed for local deployment and requires significant memory
+        // This module is skipped by default. Use --run_qtlviewer to enable
+        if (params.run_qtlviewer) {
+            log.info "Running QTL Viewer setup (local deployment only)"
 
-        SETUP_QTLVIEWER_DEPLOYMENT(
-            PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-            ch_study_prefix
-        )
+            PREPARE_QTLVIEWER_DATA(
+                CREATE_CROSS2_OBJECT.out.cross2_object,
+                PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+                PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
+                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+                COMBINE_BATCH_RESULTS.out.scan_results,
+                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                ch_study_prefix
+            )
+
+            SETUP_QTLVIEWER_DEPLOYMENT(
+                PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
+                ch_study_prefix
+            )
+
+            // Display results for Module 9
+            PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
+            SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
+            SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
+            SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+        } else {
+            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (designed for local deployment)"
+        }
 
         // Display results for Modules 5-8
         PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }
@@ -302,12 +322,6 @@ workflow {
         CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.view { "Significance thresholds: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
         IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
-
-        // Display results for Module 9
-        PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-        SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
-        SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
-        SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
         
     } else {
         log.info "Skipping genotype processing - no FinalReport files specified"

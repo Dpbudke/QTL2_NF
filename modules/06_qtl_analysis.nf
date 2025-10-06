@@ -154,16 +154,6 @@ process GENOME_SCAN_BATCH {
     chunk_assignments <- read.table("${chunk_file}", header = TRUE, sep = "\\t")
     batch_assignments <- read.table("${batch_file}", header = TRUE, sep = "\\t")
 
-    # Function to find chromosome and position for a marker
-    find_marker_position <- function(marker_id, cross2_obj) {
-        for (chr in names(cross2_obj\$gmap)) {
-            if (marker_id %in% names(cross2_obj\$gmap[[chr]])) {
-                pos <- cross2_obj\$gmap[[chr]][marker_id]
-                return(list(chr = chr, pos = as.numeric(pos)))
-            }
-        }
-        return(list(chr = NA, pos = NA))
-    }
 
     # Get chunks for this specific batch
     chunks_in_batch <- batch_assignments\$chunk_id[batch_assignments\$batch_id == ${batch_id}]
@@ -201,29 +191,19 @@ process GENOME_SCAN_BATCH {
             chunk_end_time <- Sys.time()
             chunk_duration <- round(as.numeric(chunk_end_time - chunk_start_time, units = "mins"), 2)
 
-            # Find peaks with proper position extraction
-            chunk_peaks <- data.frame()
-            for (i in 1:ncol(scan_result)) {
-                max_lod <- max(scan_result[, i], na.rm = TRUE)
-                if (max_lod >= ${lod_threshold}) {
-                    max_idx <- which.max(scan_result[, i])
-                    marker_id <- rownames(scan_result)[max_idx]
-                    pos_info <- find_marker_position(marker_id, cross2)
-                    chunk_peaks <- rbind(chunk_peaks, data.frame(
-                        chr = pos_info\$chr,
-                        phenotype = colnames(scan_result)[i],
-                        pos = pos_info\$pos,
-                        lod = max_lod,
-                        stringsAsFactors = FALSE
-                    ))
-                }
-            }
+            # Find ALL peaks above threshold using find_peaks (not just the max)
+            # drop=1.5 means LOD must drop by at least 1.5 to define separate peaks
+            chunk_peaks <- find_peaks(scan_result, cross2\$gmap, threshold=${lod_threshold}, drop=1.5)
 
             # Store results
             batch_results[[as.character(chunk_id)]] <- scan_result
-            batch_peaks <- rbind(batch_peaks, chunk_peaks)
 
-            phenos_with_peaks <- unique(chunk_peaks\$phenotype)
+            # Add peaks to batch collection if any found
+            if (nrow(chunk_peaks) > 0) {
+                batch_peaks <- rbind(batch_peaks, chunk_peaks)
+            }
+
+            phenos_with_peaks <- unique(chunk_peaks\$lodcolumn)
             batch_filtered_phenos <- c(batch_filtered_phenos, phenos_with_peaks)
 
             log_message(paste("Chunk", chunk_id, "completed in", chunk_duration, "minutes,",
@@ -325,8 +305,16 @@ process COMBINE_BATCH_RESULTS {
         "",
         "=== Results ===",
         paste("Total phenotypes scanned:", ncol(combined_scan)),
-        paste("Phenotypes with peaks >", ${lod_threshold}, "LOD:", length(all_phenos)),
-        paste("Total peaks found:", nrow(all_peaks)),
+        paste("Phenotypes with peaks > LOD", paste0(${lod_threshold}, ":"), length(all_phenos)),
+        paste("Total QTL peaks found:", nrow(all_peaks)),
+        "",
+        "=== Multiple Peaks Analysis ===",
+        paste("Note: Using find_peaks() with drop=1.5 LOD to identify separate peaks"),
+        paste("Phenotypes with exactly 1 peak:", sum(table(all_peaks\$lodcolumn) == 1)),
+        paste("Phenotypes with 2+ peaks:", sum(table(all_peaks\$lodcolumn) >= 2)),
+        paste("Phenotypes with 3+ peaks:", sum(table(all_peaks\$lodcolumn) >= 3)),
+        paste("Average peaks per phenotype:", round(nrow(all_peaks) / length(all_phenos), 2)),
+        paste("Maximum peaks for single phenotype:", max(table(all_peaks\$lodcolumn))),
         "",
         "=== Per-Chromosome Summary ===",
         paste(capture.output(table(all_peaks\$chr)), collapse = "\\n")

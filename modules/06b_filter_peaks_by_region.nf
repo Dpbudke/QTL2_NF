@@ -79,11 +79,11 @@ process FILTER_PEAKS_BY_REGION {
         }
     }
 
-    # Load peaks (has chr, phenotype, pos, lod columns)
+    # Load peaks (has lodcolumn, chr, pos, lod columns from qtl2::find_peaks)
     log_message("Loading QTL peaks...")
     peaks <- fread("${all_peaks_file}")
     total_peaks <- nrow(peaks)
-    total_phenos <- length(unique(peaks\$phenotype))
+    total_phenos <- length(unique(peaks\$lodcolumn))
     log_message(sprintf("Total peaks: %d", total_peaks))
     log_message(sprintf("Unique phenotypes with peaks: %d", total_phenos))
 
@@ -123,11 +123,11 @@ process FILTER_PEAKS_BY_REGION {
     # Cross-reference peaks with gene locations
     log_message("Cross-referencing peak phenotypes with GTF gene locations...")
 
-    # Match phenotype IDs to gene IDs
+    # Match phenotype IDs (lodcolumn) to gene IDs
     peaks_with_loc <- merge(
         peaks,
         gene_locations,
-        by.x = "phenotype",
+        by.x = "lodcolumn",
         by.y = "gene_id",
         all.x = TRUE,
         suffixes = c("_peak", "_gene")
@@ -135,7 +135,7 @@ process FILTER_PEAKS_BY_REGION {
 
     # Report matching statistics
     matched_peaks <- sum(!is.na(peaks_with_loc\$chr_gene))
-    matched_phenos <- length(unique(peaks_with_loc\$phenotype[!is.na(peaks_with_loc\$chr_gene)]))
+    matched_phenos <- length(unique(peaks_with_loc\$lodcolumn[!is.na(peaks_with_loc\$chr_gene)]))
 
     log_message("")
     log_message("=== PHENOTYPE MATCHING STATISTICS ===")
@@ -147,7 +147,7 @@ process FILTER_PEAKS_BY_REGION {
                        100 * matched_phenos / total_phenos))
 
     if (matched_phenos < total_phenos) {
-        unmatched <- unique(peaks\$phenotype[!peaks\$phenotype %in% gene_locations\$gene_id])
+        unmatched <- unique(peaks\$lodcolumn[!peaks\$lodcolumn %in% gene_locations\$gene_id])
         log_message(sprintf("WARNING: %d phenotypes not found in GTF annotation", length(unmatched)))
         log_message(sprintf("First 10 unmatched phenotypes: %s",
                            paste(head(unmatched, 10), collapse=", ")))
@@ -180,7 +180,7 @@ process FILTER_PEAKS_BY_REGION {
                        100 * nrow(filtered_peaks) / total_peaks))
 
     # Get unique phenotypes
-    filtered_phenotypes <- unique(filtered_peaks\$phenotype)
+    filtered_phenotypes <- unique(filtered_peaks\$lodcolumn)
     log_message(sprintf("Phenotypes with peaks in target regions: %d/%d (%.1f%%)",
                        length(filtered_phenotypes), total_phenos,
                        100 * length(filtered_phenotypes) / total_phenos))
@@ -196,7 +196,7 @@ process FILTER_PEAKS_BY_REGION {
             filtered_peaks\$end_mbp >= r\$start_mbp &
             filtered_peaks\$start_mbp <= r\$end_mbp
         ]
-        region_phenos <- length(unique(region_peaks\$phenotype))
+        region_phenos <- length(unique(region_peaks\$lodcolumn))
 
         if (is.infinite(r\$end_mbp)) {
             log_message(sprintf("chr%s: %d peaks, %d phenotypes",
@@ -209,7 +209,7 @@ process FILTER_PEAKS_BY_REGION {
     }
 
     # Prepare output - keep only original peak columns plus gene location info
-    output_peaks <- filtered_peaks[, .(phenotype, chr = chr_peak, pos, lod,
+    output_peaks <- filtered_peaks[, .(lodcolumn, chr = chr_peak, pos, lod,
                                        gene_chr = chr_gene,
                                        gene_start_mbp = start_mbp, gene_end_mbp = end_mbp)]
 

@@ -22,7 +22,10 @@ params.sample_filter = null
 params.help = false
 
 // Resume parameters
-params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, significant_qtls, qtlviewer
+params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, qtlviewer
+
+// QTL Viewer parameters (Module 9 - optional, for local deployment only)
+params.run_qtlviewer = false  // Set to true to run QTL Viewer setup (designed for local deployment)
 
 // Print help message
 def helpMessage() {
@@ -59,6 +62,7 @@ def helpMessage() {
         --outdir            Output directory [default: results]
         --lod_threshold     LOD threshold for filtering [default: 7.0]
         --sample_filter     JSON filter for sample subsetting
+        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - local deployment only) [default: false]
 
     Examples:
         # Full pipeline
@@ -87,7 +91,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'regional_filter', 'permutation', 'significant_qtls', 'qtlviewer']
+                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -127,7 +131,7 @@ include { CREATE_CROSS2_OBJECT } from './modules/04_cross2_creation.nf'
 include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
 include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
-include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
+include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
 
@@ -152,7 +156,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'regional_filter', 'permutation', 'significant_qtls', 'qtlviewer']
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -350,19 +354,41 @@ workflow {
                 Channel.value(params.lod_threshold)
             )
 
-            // Combine all batch results
-            COMBINE_BATCH_RESULTS(
-                GENOME_SCAN_BATCH.out.batch_results.collect(),
-                GENOME_SCAN_BATCH.out.batch_peaks.collect(),
-                GENOME_SCAN_BATCH.out.batch_filtered_phenos.collect(),
-                GENOME_SCAN_BATCH.out.batch_log.collect(),
-                ch_study_prefix,
-                Channel.value(params.lod_threshold)
-            )
+            // Check if we need to run COMBINE or if batch results already exist
+            def batch_results_dir = "${params.outdir}/06_qtl_analysis/batches"
+            def combined_results_file = "${params.outdir}/06_qtl_analysis/${params.study_prefix}_scan_results.rds"
 
-            ch_scan_results = COMBINE_BATCH_RESULTS.out.scan_results
-            ch_peaks = COMBINE_BATCH_RESULTS.out.peaks
-            ch_filtered_phenotypes = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
+            if (file(combined_results_file).exists()) {
+                log.info "Combined results already exist - skipping COMBINE_BATCH_RESULTS"
+                ch_scan_results = Channel.fromPath(combined_results_file)
+                ch_peaks = Channel.fromPath("${params.outdir}/06_qtl_analysis/${params.study_prefix}_all_peaks.csv")
+                ch_filtered_phenotypes = Channel.fromPath("${params.outdir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt")
+            } else {
+                log.info "Combining batch results from published files"
+
+                // Instead of collecting from channels, read from published batch directory
+                // This avoids the .collect() hang issue when batch jobs are cached
+                Channel.fromPath("${batch_results_dir}/*_batch*_results.rds").collect().set { ch_batch_results_files }
+                Channel.fromPath("${batch_results_dir}/*_batch*_peaks.csv").collect().set { ch_batch_peaks_files }
+                Channel.fromPath("${batch_results_dir}/*_batch*_filtered_phenos.txt").collect().set { ch_batch_phenos_files }
+                Channel.fromPath("${batch_results_dir}/*_batch*_log.txt").collect().set { ch_batch_log_files }
+
+                COMBINE_BATCH_RESULTS(
+                    ch_batch_results_files,
+                    ch_batch_peaks_files,
+                    ch_batch_phenos_files,
+                    ch_batch_log_files,
+                    ch_study_prefix,
+                    Channel.value(params.lod_threshold)
+                )
+
+                ch_scan_results = COMBINE_BATCH_RESULTS.out.scan_results
+                ch_peaks = COMBINE_BATCH_RESULTS.out.peaks
+                ch_filtered_phenotypes = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
+
+                COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
+                COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
+            }
 
         } else {
             log.info "Skipping GENOME_SCAN_BATCH - loading from existing files"
@@ -373,14 +399,9 @@ workflow {
             ch_filtered_phenotypes = Channel.fromPath(checkFileExists("${params.outdir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt", "filtered phenotypes"))
         }
 
-        // Display results (conditional based on whether batch was run)
-        if (shouldRunStep('genome_scan', params.resume_from)) {
-            COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
-            COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
-        }
-
         // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
         def filtered_phenos_for_perm
+        def regional_filter_file = "${params.outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
 
         if (shouldRunStep('regional_filter', params.resume_from)) {
             // Regional filter step explicitly requested
@@ -402,10 +423,13 @@ workflow {
             FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
             filtered_phenos_for_perm = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
 
-        } else if (params.qtl_region != null) {
-            // Regional filtering enabled via parameter
-            def regional_filter_file = "${params.outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
+        } else if (file(regional_filter_file).exists()) {
+            // Existing regional filter found - use it automatically
+            log.info "Using existing regional filtered phenotypes from: ${regional_filter_file}"
+            filtered_phenos_for_perm = Channel.fromPath(regional_filter_file)
 
+        } else if (params.qtl_region != null) {
+            // Regional filtering enabled via parameter but no existing filter
             if (shouldRunStep('genome_scan', params.resume_from)) {
                 // Genome scan just ran - filter using its output
                 log.info "Filtering QTL peaks to genomic region: ${params.qtl_region}"
@@ -421,17 +445,12 @@ workflow {
                 FILTER_PEAKS_BY_REGION.out.filter_report.view { "Regional filtering report: $it" }
                 filtered_phenos_for_perm = FILTER_PEAKS_BY_REGION.out.filtered_phenotypes
 
-            } else if (file(regional_filter_file).exists()) {
-                // Use existing filtered results
-                log.info "Using existing regional filtered phenotypes from: ${regional_filter_file}"
-                filtered_phenos_for_perm = Channel.fromPath(regional_filter_file)
-
             } else {
                 log.info "No existing regional filter - using all LOD-filtered phenotypes"
                 filtered_phenos_for_perm = ch_filtered_phenotypes
             }
         } else {
-            log.info "No regional filtering - using all LOD-filtered phenotypes"
+            log.info "No regional filtering applied - using all LOD-filtered phenotypes"
             filtered_phenos_for_perm = ch_filtered_phenotypes
         }
 
@@ -463,6 +482,24 @@ workflow {
 
             ch_perm_results = CHUNKED_PERMUTATION_TESTING.out.permutation_matrix
             ch_thresholds = CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds
+            ch_filtered_cross2 = CHUNKED_PERMUTATION_TESTING.out.filtered_cross2
+
+        } else if (params.resume_from == 'perm_aggregate') {
+            log.info "Running only PERM_AGGREGATE - using existing batch results"
+
+            // Collect batch result files from the specific PERM_AGGREGATE work directory
+            ch_batch_results = Channel.fromPath("nextflow_work/61/1a7b0ce0ae36aa7b2b6867dd3f4d31/${params.study_prefix}_*_batch_*.rds")
+                .collect()
+
+            PERM_AGGREGATE(
+                ch_batch_results,
+                ch_study_prefix,
+                Channel.value(params.lod_threshold)
+            )
+
+            ch_perm_results = PERM_AGGREGATE.out.full_perm_matrix
+            ch_thresholds = PERM_AGGREGATE.out.perm_thresholds
+            ch_filtered_cross2 = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_filtered_cross2.rds", "filtered cross2"))
 
         } else {
             log.info "Skipping CHUNKED_PERMUTATION_TESTING - loading from existing files"
@@ -470,6 +507,7 @@ workflow {
             // Load existing permutation results (updated file names for chunked approach)
             ch_perm_results = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_fullPerm.rds", "permutation matrix"))
             ch_thresholds = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_permThresh.rds", "permutation thresholds"))
+            ch_filtered_cross2 = Channel.fromPath(checkFileExists("${params.outdir}/07_permutation_testing/${params.study_prefix}_filtered_cross2.rds", "filtered cross2"))
         }
 
         // Display results (conditional based on whether permutation was run)
@@ -480,35 +518,52 @@ workflow {
         }
 
         // MODULE 8: Significant QTL Identification
-        IDENTIFY_SIGNIFICANT_QTLS(
-            ch_cross2_object,
-            ch_scan_results,
-            ch_perm_results,
-            ch_thresholds,
-            ch_study_prefix
-        )
+        if (shouldRunStep('significant_qtls', params.resume_from)) {
+            IDENTIFY_SIGNIFICANT_QTLS(
+                ch_filtered_cross2,
+                ch_scan_results,
+                ch_perm_results,
+                ch_thresholds,
+                ch_study_prefix
+            )
 
-        IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
-        IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
+            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
+            IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
 
-        // MODULE 9: QTL Viewer Integration
-        PREPARE_QTLVIEWER_DATA(
-            ch_cross2_object,
-            ch_genoprob,
-            ch_kinship_loco,
-            ch_genetic_map,
-            ch_scan_results,
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-            ch_study_prefix
-        )
+            ch_significant_qtls = IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls
+        } else {
+            log.info "Skipping IDENTIFY_SIGNIFICANT_QTLS - loading from existing files"
+            ch_significant_qtls = Channel.fromPath(checkFileExists("${params.outdir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs"))
+        }
 
-        SETUP_QTLVIEWER_DEPLOYMENT(
-            PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-            ch_study_prefix
-        )
+        // MODULE 9: QTL Viewer Integration (Optional - for local deployment only)
+        // NOTE: Module 9 is designed for local deployment and requires significant memory
+        // Use --run_qtlviewer to enable this module
+        if (params.run_qtlviewer || shouldRunStep('qtlviewer', params.resume_from)) {
+            log.info "Running QTL Viewer setup (local deployment only)"
+            log.info "Module 9 will auto-detect whether to use filtered or full cross2"
 
-        PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-        SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+            PREPARE_QTLVIEWER_DATA(
+                ch_genoprob,
+                ch_kinship_loco,
+                ch_genetic_map,
+                ch_scan_results,
+                ch_significant_qtls,
+                ch_study_prefix
+            )
+
+            // SETUP_QTLVIEWER_DEPLOYMENT takes RData as input to create dependency
+            // but reads the actual file from results directory (which PREPARE writes directly)
+            SETUP_QTLVIEWER_DEPLOYMENT(
+                PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
+                ch_study_prefix
+            )
+
+            PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
+            SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+        } else {
+            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (designed for local deployment)"
+        }
 
     } else {
         log.info "Skipping genotype-dependent modules - no FinalReport files specified"

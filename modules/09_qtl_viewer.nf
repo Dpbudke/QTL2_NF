@@ -3,7 +3,6 @@ process PREPARE_QTLVIEWER_DATA {
     publishDir "${params.outdir}/09_qtl_viewer_data", mode: 'copy'
 
     input:
-    path(cross2_file)
     path(genoprob_file)
     path(kinship_file)
     path(genetic_map_file)
@@ -35,8 +34,27 @@ process PREPARE_QTLVIEWER_DATA {
 
     cat("Loading QTL analysis results for QTL Viewer conversion...\\n")
 
-    # Load all required data files
-    cross2 <- readRDS("${cross2_file}")
+    # Determine which cross2 file to use - prefer filtered if available
+    # Use absolute paths from the workflow root directory
+    workflow_dir <- "${workflow.launchDir}"
+    filtered_cross2_path <- file.path(workflow_dir, "${params.outdir}/07_permutation_testing/${prefix}_filtered_cross2.rds")
+    full_cross2_path <- file.path(workflow_dir, "${params.outdir}/04_cross2_creation/${prefix}_cross2.rds")
+
+    cat(paste("Checking for filtered cross2:", filtered_cross2_path, "\\n"))
+    cat(paste("Checking for full cross2:", full_cross2_path, "\\n"))
+
+    if (file.exists(filtered_cross2_path)) {
+        cat("Using regionally filtered cross2 from module 7\\n")
+        cross2 <- readRDS(filtered_cross2_path)
+        validation_log <- c(validation_log, "Cross2 Source: Regionally filtered (module 7)")
+    } else if (file.exists(full_cross2_path)) {
+        cat("Using full cross2 from module 4\\n")
+        cross2 <- readRDS(full_cross2_path)
+        validation_log <- c(validation_log, "Cross2 Source: Full dataset (module 4)")
+    } else {
+        stop(paste("ERROR: No cross2 file found. Checked:", filtered_cross2_path, "and", full_cross2_path))
+    }
+    validation_log <- c(validation_log, "")
     genoprobs <- readRDS("${genoprob_file}")
     K <- readRDS("${kinship_file}")
     gmap <- readRDS("${genetic_map_file}")
@@ -281,7 +299,7 @@ process PREPARE_QTLVIEWER_DATA {
     writeLines(validation_log, "qtlviewer_conversion_report.txt")
 
     cat("QTL Viewer data conversion completed successfully\\n")
-    cat("RData file is ready for local deployment with Docker containers\\n")
+    cat("RData file is ready for local Docker deployment with Docker containers\\n")
     """
 }
 
@@ -290,14 +308,14 @@ process SETUP_QTLVIEWER_DEPLOYMENT {
     publishDir "${params.outdir}/09_qtl_viewer_data", mode: 'copy'
 
     input:
-    path(qtlviewer_data)
+    path(qtlviewer_data)  // Dependency to ensure PREPARE completes first
     val(prefix)
 
     output:
     path("docker-compose.yml"), emit: docker_compose
     path("start_qtlviewer.sh"), emit: startup_script
     path("README_qtlviewer.md"), emit: instructions
-    path("data/"), emit: data_directory
+    path("data"), emit: data_directory, type: 'dir'
 
     script:
     """
@@ -309,7 +327,8 @@ process SETUP_QTLVIEWER_DEPLOYMENT {
     mkdir -p data/rdata
     mkdir -p data/sqlite
 
-    # Copy QTL Viewer RData file to expected location
+    # Copy QTL Viewer RData file from Nextflow input channel
+    echo "Copying QTL Viewer RData file to deployment structure..."
     cp "${qtlviewer_data}" "data/rdata/${prefix}.RData"
 
     # Handle SQLite database for founder SNPs
