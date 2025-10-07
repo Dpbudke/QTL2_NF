@@ -31,18 +31,18 @@ The pipeline consists of 9 numbered modules (plus optional Module 6b) organized 
 **Purpose**: Comprehensive validation and preparation of phenotype/covariate data according to r/qtl2 specifications with robust support for diverse molecular data types and experimental designs
 
 **Key Functions**:
-- **Data Structure Validation**: Automated parsing of DO_Pipe-formatted CSV files with header row indicators for seamless data type recognition
+- **Data Structure Validation**: Automated parsing of specially formatted CSV files with header row indicators for seamless data type recognition
 - **Sample ID Standardization**: Cross-validation of sample identifiers between phenotype and genotype datasets with automatic format harmonization
 - **Numeric Matrix Enforcement**: Conversion of phenotype data to numeric matrices with intelligent handling of missing data patterns and outlier detection
 - **Required Covariate Validation**: Verification of essential covariates (Sex, generation) as mandated by r/qtl2 for Diversity Outbred cross analysis
 - **Optional Covariate Integration**: Flexible incorporation of experimental factors (Diet, batch, age, treatment groups) with automatic categorical encoding
 - **Multi-Phenotype Support**: Scalable validation for high-dimensional datasets including thousands of molecular traits (transcripts, metabolites, proteins)
 - **Quality Control Diagnostics**: Comprehensive outlier detection, batch effect assessment, and correlation analysis with detailed visualization reports
-- **Format Compliance**: Generation of r/qtl2-compliant data structures following DO_Pipe formatting conventions with proper metadata integration
+- **Format Compliance**: Generation of r/qtl2-compliant data structures with proper metadata integration
 - **Missing Data Management**: Intelligent handling of missing values with appropriate encoding strategies for downstream statistical analysis
 
 **Input Format Requirements**:
-The module processes specially formatted CSV files with the DO_Pipe convention:
+The module processes specially formatted CSV files with the following convention:
 - **Row 1**: Type indicators distinguishing covariate and phenotype columns
 - **Row 2**: Column headers with standardized naming conventions
 - **Data Rows**: Sample-wise measurements with automatic data type validation
@@ -53,7 +53,7 @@ The module processes specially formatted CSV files with the DO_Pipe convention:
 **Resources**: 1 CPU, 2GB RAM, 1 hour
 
 ### Module 2: Genotype Processing (`02_genotype_process.nf`)
-**Purpose**: Comprehensive conversion of GeneSeek FinalReport files to r/qtl2-compatible format using enhanced DO_Pipe-derived methodologies with robust quality control and validation
+**Purpose**: Comprehensive conversion of GeneSeek FinalReport files to r/qtl2-compatible format with robust quality control and validation
 
 **Key Functions**:
 - **GeneSeek FinalReport Parsing**: Advanced parsing engine supporting multiple input files with automated batch processing and error recovery
@@ -72,7 +72,7 @@ The module processes specially formatted CSV files with the DO_Pipe convention:
 **Resources**: 2 CPUs, 64GB RAM, 4 hours
 
 ### Module 3: Control File Generation (`03_control_file_generation.nf`)
-**Purpose**: Create r/qtl2 control files and metadata structures following DO_Pipe specifications
+**Purpose**: Create r/qtl2 control files and metadata structures for multiparental cross analysis
 
 **Key Functions**:
 - JSON control file generation with complete metadata for multiparental crosses
@@ -81,7 +81,7 @@ The module processes specially formatted CSV files with the DO_Pipe convention:
 - Cross type specification with founder strain definitions (8 founder strains for DO)
 - Reference file integration including genetic maps, founder genotypes, and marker annotations
 - Cross information structure creation compatible with r/qtl2 requirements
-- Integration of DO_Pipe cross2 generation methodologies for robust object creation
+- Automated cross2 generation methodologies for robust object creation
 
 **Resources**: 2 CPUs, 4GB RAM, 2 hours
 
@@ -210,23 +210,52 @@ The module processes specially formatted CSV files with the DO_Pipe convention:
 
 **Resources**: PREPARE_QTLVIEWER_DATA (16 CPUs, 256GB, 6h), SETUP_QTLVIEWER_DEPLOYMENT (2 CPUs, 16GB, 1h)
 
-### Optional: DO Sample Mixup QC (`do_mixup_qc.nf`)
-**Purpose**: Standalone quality control module for detecting sample mix-ups in Diversity Outbred populations
+### Optional: Broman Mixup QC (`broman_mixup_qc.nf`)
+**Purpose**: Detect sample mix-ups by comparing observed expression patterns with genotype-predicted expression using eQTL signatures
 
-**Key Functions**:
-- **Sample Identity Verification**: Cross-validation using genetic markers and phenotype correlations
-- **Cis-eQTL Analysis**: Transcript-genotype consistency checking for molecular phenotypes
-- **Distance-based Clustering**: Sample relationship validation using genetic similarity
-- **Automated Detection**: Identifies potential sample swaps, mislabeling, or contamination
-- **Corrective Mapping**: Generates corrected sample assignments for data integrity
-- **Comprehensive Reporting**: HTML reports with visualizations and actionable recommendations
-- **Integration Ready**: Compatible with existing QTL results for enhanced validation
+**Scientific Methodology**:
+Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifies sample mislabeling by testing whether observed gene expression matches the expression pattern predicted from an individual's genotype at strong eQTL positions.
 
-**Scientific Methodology**: Implements Broman et al. (2015) G3 validation approaches for multiparental populations
+**Process Workflow**:
+1. **eQTL Selection**: Identifies top N eQTL (default: 100) with highest LOD scores from Module 8 significant QTLs
+2. **Observed Expression Extraction**: Retrieves actual measured expression values for genes with strong eQTL
+3. **Predicted Expression Calculation**:
+   - Extracts genotype probabilities at eQTL marker positions
+   - Fits single-QTL models using `qtl2::fit1()` with `zerosum=FALSE` to preserve original scale
+   - Calculates predicted expression from genotype probabilities: `predicted = genoprob %*% coefficients`
+4. **Distance Matrix Computation**: Uses `lineup2::dist_betw_matrices()` to calculate RMS distances between all pairs of observed and predicted expression profiles
+5. **Mixup Detection**: Identifies samples where self-distance (observed vs own predicted) exceeds minimum distance to any other sample's predicted expression
 
-**Usage**: Deployable as standalone QC or integrated into main pipeline workflow
+**Input Requirements**:
+- **cross2_file**: Cross2 object from Module 4 (`results/04_cross2_creation/{prefix}_cross2_object.rds`)
+- **genoprob_file**: Genotype probabilities from Module 5 (`results/05_genome_scan_preparation/{prefix}_genoprob.rds`)
+- **expr_data_file**: Expression data matrix (RDS format: samples × genes, typically inverse-rank-normalized log2 CPM)
+- **expr_peaks_file**: eQTL peaks CSV from Module 8 (`results/08_significant_qtls/{prefix}_significant_qtls.csv`)
+- **n_top_eqtl**: Number of top eQTL to analyze (default: 100, adjustable based on dataset size)
 
-**Resources**: 8 CPUs, 32GB RAM, 3 hours
+**Output Files** (`results/mixup_qc/`):
+- **{prefix}_mixup_report.html**: Interactive HTML QC report with summary statistics
+- **{prefix}_mixup_problems.csv**: Per-sample analysis with columns:
+  - `sample`: Sample identifier
+  - `self_distance`: RMS distance between observed and own predicted expression
+  - `min_distance`: Minimum RMS distance to any sample's predicted expression
+  - `best_match`: Sample ID with closest predicted expression match
+  - `is_problem`: Boolean flag (TRUE if self_distance > min_distance, indicating potential mixup)
+- **{prefix}_distance_matrix.csv**: Full RMS distance matrix (observed samples × predicted samples)
+- **{prefix}_mixup_plots.pdf**: Diagnostic scatter plot (self distance vs minimum distance)
+  - Points below diagonal (red) indicate potential mix-ups
+  - Gray points represent samples with consistent genotype-expression relationships
+- **mixup_qc_log.txt**: Detailed analysis log with timestamps and processing statistics
+
+**Interpretation Guidelines**:
+- **Normal samples**: Self-distance ≈ minimum distance (points near diagonal)
+- **Potential mix-ups**: Self-distance > minimum distance (points below diagonal)
+- **Action required**: Investigate `best_match` to identify likely correct sample identity
+- **Threshold considerations**: Small deviations may reflect biological variation; focus on substantial differences
+
+**Usage**: Run as standalone QC analysis after Module 8 when expression data is available
+
+**Resources**: 8 CPUs, 64GB RAM, 4 hours
 
 ## Installation and Setup
 
@@ -260,7 +289,7 @@ cd QTL2_NF
 mkdir -p Data/
 
 # Place input files:
-# - Phenotype CSV (DO_Pipe format) → Data/
+# - Phenotype CSV (specially formatted with header row indicators) → Data/
 # - GeneSeek FinalReport files → Data/
 # - Verify file naming matches glob patterns
 ls Data/  # Should show your phenotype.csv and FinalReport*.txt files
@@ -481,10 +510,10 @@ nextflow run main.nf \
 ## Input Data Requirements
 
 ### Phenotype File Format
-The pipeline requires a specially formatted CSV file following the DO_Pipe convention with header row indicators. This standardized format enables automated parsing and supports diverse phenotype types from clinical measurements to high-dimensional molecular data:
+The pipeline requires a specially formatted CSV file with header row indicators. This standardized format enables automated parsing and supports diverse phenotype types from clinical measurements to high-dimensional molecular data:
 
 **File Structure Requirements**:
-The pipeline uses a specialized CSV format developed by the DO_Pipe project that facilitates automated parsing of metadata and phenotype information:
+The pipeline uses a specialized CSV format that facilitates automated parsing of metadata and phenotype information:
 
 - **Row 1**: Column type indicators
   - Column A: empty (reserved for sample IDs)
@@ -785,7 +814,7 @@ apptainer {
 ### Pipeline Parameters
 
 **Required Parameters**:
-- `--phenotype_file`: Path to master phenotype CSV file (DO_Pipe format)
+- `--phenotype_file`: Path to master phenotype CSV file (specially formatted with header row indicators)
 - `--study_prefix`: Unique study identifier for all output files
 
 **Optional Parameters**:
@@ -868,48 +897,47 @@ Optional targeted analysis for dramatic computational savings:
 - **Resource Efficiency**: Combined LOD threshold + regional filtering achieves >99% workload reduction when applicable
 
 
-## Scientific Methodology and Integration
+## Scientific Methodology
 
-QTL2_NF represents a comprehensive automation and scaling of methodologies originally developed in the DO_Pipe project (https://github.com/exsquire/DO_pipe), which provides foundational scripts and approaches for Diversity Outbred population analysis. This pipeline transforms the manual DO_Pipe workflow into a fully automated, reproducible, and scalable Nextflow implementation while preserving the scientific rigor and methodological approaches of the original project.
+QTL2_NF implements a comprehensive, automated workflow for quantitative trait loci mapping in multiparental populations, with particular optimization for Diversity Outbred (DO) mouse populations.
 
-**Key DO_Pipe Integrations and Enhancements**:
+**Core Statistical Framework**:
 
-**Genotype Processing (Module 2)**:
-- Adapts DO_Pipe's comprehensive approach for GeneSeek FinalReport file parsing and validation
-- Incorporates DO_Pipe's sample filtering strategies and marker quality control methodologies
-- Automates chromosome-specific file generation following DO_Pipe formatting standards
-- Enhances original scripts with improved error handling and resource management for HPC environments
+**Genotype Processing and Quality Control**:
+- Comprehensive GeneSeek FinalReport file parsing and validation with automated batch processing
+- Sample filtering strategies and marker quality control methodologies ensuring high-quality genotype data
+- Chromosome-specific file generation with standardized formatting for r/qtl2 compatibility
+- Advanced error handling and resource management optimized for HPC environments
 
-**Cross2 Object Creation (Module 3)**:
-- Directly implements DO_Pipe's cross2 generation logic with enhanced automation
-- Preserves DO_Pipe's metadata structure requirements and founder strain definitions (8 DO founder strains)
-- Adds comprehensive validation and diagnostics beyond the original DO_Pipe implementation
-- Integrates reference file handling and genetic map specifications from DO_Pipe standards
+**Cross2 Object Creation and Metadata Management**:
+- Automated cross2 generation with comprehensive validation and diagnostics
+- Metadata structure requirements including founder strain definitions (8 DO founder strains)
+- Reference file handling and genetic map integration for accurate genomic positioning
+- Sex chromosome handling and allele encoding optimized for multiparental populations
 
-**Data Format Conventions**:
-- Maintains full compatibility with DO_Pipe's phenotype file format using header row indicators
-- Preserves DO_Pipe's covariate/phenotype column distinction methodology
-- Extends DO_Pipe's sample ID standardization procedures for improved robustness
-- Implements DO_Pipe's approach to handling missing data and categorical covariates
+**QTL Mapping Methodology**:
+- Linear mixed model approach using r/qtl2 framework with LOCO (Leave One Chromosome Out) kinship correction
+- High-resolution genotype probability calculation (0.5 cM pseudomarker spacing)
+- Genome-wide scanning with additive covariate adjustment for experimental design factors
+- Multiple peak detection per phenotype using drop=1.5 LOD threshold criterion
 
-**Statistical Methodology**:
-- Builds upon DO_Pipe's QTL mapping strategies using r/qtl2 linear mixed models
-- Incorporates DO_Pipe's permutation testing framework with enhanced computational efficiency
-- Extends DO_Pipe's significance threshold calculation methods with multi-level thresholding
-- Preserves DO_Pipe's kinship matrix generation and LOCO (Leave One Chromosome Out) correction approaches
+**Permutation Testing and Significance Thresholds**:
+- Efficient fork-based parallelism for permutation testing on Linux HPC systems
+- Multi-level significance threshold calculation (63%, 90%, 95%, 99% quantiles)
+- Smart pre-filtering reduces computational burden by 70-90% while maintaining statistical rigor
+- Phenotype-specific empirical thresholds account for varying genetic architectures
 
-**Quality Control Integration**:
-- Implements enhanced versions of DO_Pipe's data validation procedures
-- Adds automated sample mixup detection capabilities based on established DO population analysis methods
-- Incorporates DO_Pipe's outlier detection and batch effect assessment strategies
+**Quality Control and Validation**:
+- Comprehensive data validation procedures ensuring phenotype-genotype consistency
+- Automated sample mixup detection using eQTL-based genotype-expression correlation
+- Outlier detection and batch effect assessment with detailed diagnostic reporting
+- Cross-validation of sample identifiers and metadata integrity checks
 
-**Automation and Scalability Enhancements**:
-- Transforms DO_Pipe's manual R scripts into containerized, reproducible Nextflow modules
-- Adds intelligent resource management and parallel processing capabilities for large datasets
-- Implements resume functionality and checkpoint recovery not available in original DO_Pipe
-- Provides automated Docker-based QTL Viewer deployment extending DO_Pipe's visualization capabilities
-
-We gratefully acknowledge the DO_Pipe project and its contributors for providing the foundational scientific methodology and computational framework that enabled the development of this automated pipeline workflow. The DO_Pipe project's rigorous approach to multiparental population analysis forms the scientific backbone of QTL2_NF's implementation.
+**Automation and Scalability**:
+- Containerized, reproducible Nextflow modules enabling consistent execution across environments
+- Intelligent resource management and parallel processing supporting 10,000+ phenotype analyses
+- Resume functionality and checkpoint recovery for efficient workflow management
+- Automated Docker-based QTL Viewer deployment for interactive visualization
 
 ## Citation
 

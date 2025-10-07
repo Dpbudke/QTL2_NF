@@ -51,6 +51,7 @@ RUN R -e "install.packages(c( \
     'qtl2plot', \
     'qtl2fst', \
     # Data quality and diagnostics \
+    'lineup2', \
     'corrplot', \
     'pheatmap', \
     'VennDiagram', \
