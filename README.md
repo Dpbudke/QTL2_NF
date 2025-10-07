@@ -9,19 +9,6 @@ A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed 
 
 QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and genotype data to identify quantitative trait loci (QTLs) with rigorous statistical significance testing. The pipeline is optimized for large-scale datasets and provides interactive visualization through QTL Viewer integration. Building upon methodologies from the DO_Pipe project (https://github.com/exsquire/DO_pipe), this pipeline implements automated workflows for multiparental population analysis with enhanced scalability and reproducibility.
 
-### Multi-Phenotype Applications
-
-This pipeline is specifically designed to handle diverse phenotype types commonly encountered in systems genetics:
-
-- **Clinical Phenotype QTLs**: Traditional quantitative traits such as body weight, organ weights, biochemical measurements, and physiological parameters
-- **Expression QTLs (eQTLs)**: RNA-seq derived gene expression levels with built-in normalization workflows including filtering, CPM normalization, and inverse rank normalization
-- **Metabolite QTLs (mQTLs)**: Metabolomics data from mass spectrometry or NMR platforms
-- **Protein QTLs (pQTLs)**: Proteomics measurements from various analytical platforms
-- **Epigenetic QTLs**: DNA methylation, histone modifications, and chromatin accessibility data
-- **Behavioral and Cognitive Traits**: Neurobehavioral assessments and cognitive performance metrics
-- **High-Dimensional Molecular Data**: Any quantitative molecular phenotype suitable for linear modeling
-
-The pipeline automatically handles the preprocessing requirements for molecular data types, including appropriate filtering thresholds, normalization strategies, and transformation procedures to ensure optimal QTL detection power.
 
 ## Pipeline Architecture
 
