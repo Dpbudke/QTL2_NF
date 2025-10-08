@@ -3,7 +3,7 @@ process PREPARE_QTLVIEWER_DATA {
     publishDir "${params.outdir}/09_qtl_viewer_data", mode: 'copy'
 
     input:
-    path(genoprob_file)
+    path(alleleprob_file)
     path(kinship_file)
     path(genetic_map_file)
     path(scan_results_file)
@@ -55,7 +55,7 @@ process PREPARE_QTLVIEWER_DATA {
         stop(paste("ERROR: No cross2 file found. Checked:", filtered_cross2_path, "and", full_cross2_path))
     }
     validation_log <- c(validation_log, "")
-    genoprobs <- readRDS("${genoprob_file}")
+    genoprobs <- readRDS("${alleleprob_file}")
     K <- readRDS("${kinship_file}")
     gmap <- readRDS("${genetic_map_file}")
     scan_results <- readRDS("${scan_results_file}")
@@ -79,15 +79,16 @@ process PREPARE_QTLVIEWER_DATA {
     ensembl.version <- 109  # Current mouse genome version as of 2024
     validation_log <- c(validation_log, paste("✓ Ensembl version set to:", ensembl.version))
 
-    # 2. GENOPROBS (already in correct format from qtl2)
+    # 2. ALLELE PROBABILITIES (alleleprobs - smaller and sufficient for QTL Viewer)
     # Verify format: list with N * K * Mj arrays per chromosome
-    validation_log <- c(validation_log, "=== Genotype Probabilities Validation ===")
-    validation_log <- c(validation_log, paste("✓ Genoprobs class:", class(genoprobs)))
+    validation_log <- c(validation_log, "=== Allele Probabilities Validation ===")
+    validation_log <- c(validation_log, paste("✓ Alleleprobs class:", class(genoprobs)))
     validation_log <- c(validation_log, paste("✓ Number of chromosomes:", length(genoprobs)))
+    validation_log <- c(validation_log, "✓ Using alleleprobs (smaller file, sufficient for visualization)")
     if (length(genoprobs) > 0) {
         first_chr <- genoprobs[[1]]
         validation_log <- c(validation_log, paste("✓ First chromosome dimensions:", paste(dim(first_chr), collapse=" x ")))
-        validation_log <- c(validation_log, paste("✓ Founder strains:", paste(dimnames(first_chr)[[2]], collapse=", ")))
+        validation_log <- c(validation_log, paste("✓ Founder alleles:", paste(dimnames(first_chr)[[2]], collapse=", ")))
     }
 
     # 3. KINSHIP MATRICES (K) - already in correct LOCO format
@@ -270,7 +271,7 @@ process PREPARE_QTLVIEWER_DATA {
     validation_log <- c(validation_log, "")
     validation_log <- c(validation_log, "=== QTL Viewer Format Validation ===")
     validation_log <- c(validation_log, "✓ ensembl.version: numeric")
-    validation_log <- c(validation_log, "✓ genoprobs: list of arrays")
+    validation_log <- c(validation_log, "✓ genoprobs: list of allele probability arrays (from alleleprob)")
     validation_log <- c(validation_log, "✓ K: list of kinship matrices")
     validation_log <- c(validation_log, "✓ map: list of position vectors")
     validation_log <- c(validation_log, "✓ markers: tibble with marker.id, chr, pos")
@@ -308,7 +309,7 @@ process SETUP_QTLVIEWER_DEPLOYMENT {
     publishDir "${params.outdir}/09_qtl_viewer_data", mode: 'copy'
 
     input:
-    path(qtlviewer_data)  // Dependency to ensure PREPARE completes first
+    path(qtlviewer_data)  // RData file from PREPARE_QTLVIEWER_DATA
     val(prefix)
 
     output:
@@ -327,9 +328,9 @@ process SETUP_QTLVIEWER_DEPLOYMENT {
     mkdir -p data/rdata
     mkdir -p data/sqlite
 
-    # Copy QTL Viewer RData file from Nextflow input channel
-    echo "Copying QTL Viewer RData file to deployment structure..."
-    cp "${qtlviewer_data}" "data/rdata/${prefix}.RData"
+    # Create symlink to RData file instead of copying (saves space and avoids duplication)
+    echo "Linking QTL Viewer RData file to deployment structure..."
+    ln -sf "../../${qtlviewer_data}" "data/rdata/${prefix}.RData"
 
     # Handle SQLite database for founder SNPs
     echo "Downloading MGI SQLite database for founder SNPs..."

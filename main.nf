@@ -292,8 +292,7 @@ workflow {
             log.info "Running QTL Viewer setup (local deployment only)"
 
             PREPARE_QTLVIEWER_DATA(
-                CREATE_CROSS2_OBJECT.out.cross2_object,
-                PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+                PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
                 PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
                 PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
                 COMBINE_BATCH_RESULTS.out.scan_results,

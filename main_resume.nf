@@ -544,7 +544,7 @@ workflow {
             log.info "Module 9 will auto-detect whether to use filtered or full cross2"
 
             PREPARE_QTLVIEWER_DATA(
-                ch_genoprob,
+                ch_alleleprob,
                 ch_kinship_loco,
                 ch_genetic_map,
                 ch_scan_results,

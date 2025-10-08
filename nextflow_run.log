@@ -1,0 +1,115 @@
+[33mNextflow 25.04.8 is available - Please consider updating your version to it(B[m
+
+ N E X T F L O W   ~  version 25.04.6
+
+Launching `main_resume.nf` [jolly_kirch] DSL2 - revision: 2bc232e109
+
+
+========================================
+ QTL2_NF Pipeline Started
+========================================
+study_prefix   : DOChln
+outdir         : results
+resume_from    : qtlviewer
+lod_threshold  : 7.0
+========================================
+
+Skipping PHENOTYPE_PROCESS - loading from existing files
+Skipping GENERATE_CONTROL_FILE - loading from existing files
+Skipping CREATE_CROSS2_OBJECT - loading from existing files
+Skipping GENOME_SCAN_BATCH - loading from existing files
+Using existing regional filtered phenotypes from: results/06b_regional_filtering/DOChln_regional_filtered_phenotypes.txt
+Skipping CHUNKED_PERMUTATION_TESTING - loading from existing files
+Skipping IDENTIFY_SIGNIFICANT_QTLS - loading from existing files
+Running QTL Viewer setup (local deployment only)
+Module 9 will auto-detect whether to use filtered or full cross2
+[-        ] PREPARE_QTLVIEWER_DATA     -
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT -
+
+[-        ] PREPARE_QTLVIEWER_DATA     -
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT -
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: DO_MIXUP_QC
+
+[-        ] PREPARE_QTLVIEWER_DATA     | 0 of 1
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT -
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: DO_MIXUP_QC
+
+executor >  slurm (1)
+[06/a30767] PRE…TL Viewer data for DOChln) | 0 of 1
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT     -
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: DO_MIXUP_QC
+
+executor >  slurm (1)
+[06/a30767] PRE…TL Viewer data for DOChln) | 0 of 1
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT     -
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: DO_MIXUP_QC
+
+executor >  slurm (1)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[-        ] SETUP_QTLVIEWER_DEPLOYMENT     | 0 of 1
+QTL Viewer conversion report: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/06/a30767dd5d9f29fd7f3ad56d062ff4/qtlviewer_conversion_report.txt
+
+
+
+executor >  slurm (2)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[df/78a7de] SET…wer deployment for DOChln) | 0 of 1
+QTL Viewer conversion report: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/06/a30767dd5d9f29fd7f3ad56d062ff4/qtlviewer_conversion_report.txt
+
+
+
+executor >  slurm (2)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[df/78a7de] SET…wer deployment for DOChln) | 0 of 1
+QTL Viewer conversion report: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/06/a30767dd5d9f29fd7f3ad56d062ff4/qtlviewer_conversion_report.txt
+QTL Viewer instructions: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/df/78a7de177bd1685ed8efcf971c75f0/README_qtlviewer.md
+
+executor >  slurm (2)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[df/78a7de] SET…wer deployment for DOChln) | 1 of 1 ✔
+QTL Viewer conversion report: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/06/a30767dd5d9f29fd7f3ad56d062ff4/qtlviewer_conversion_report.txt
+QTL Viewer instructions: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/df/78a7de177bd1685ed8efcf971c75f0/README_qtlviewer.md
+
+executor >  slurm (2)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[df/78a7de] SET…wer deployment for DOChln) | 1 of 1 ✔
+QTL Viewer instructions: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/df/78a7de177bd1685ed8efcf971c75f0/README_qtlviewer.md
+
+========================================
+ QTL2_NF Pipeline Completed
+========================================
+Status     : SUCCESS
+Time       : 6m 6s
+Workdir    : /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work
+Results    : results
+Resume from: qtlviewer
+========================================
+
+
+
+executor >  slurm (2)
+[06/a30767] PRE…TL Viewer data for DOChln) | 1 of 1 ✔
+[df/78a7de] SET…wer deployment for DOChln) | 1 of 1 ✔
+QTL Viewer instructions: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/df/78a7de177bd1685ed8efcf971c75f0/README_qtlviewer.md
+
+========================================
+ QTL2_NF Pipeline Completed
+========================================
+Status     : SUCCESS
+Time       : 6m 6s
+Workdir    : /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work
+Results    : results
+Resume from: qtlviewer
+========================================
+
+
+Completed at: 08-Oct-2025 15:53:21
+Duration    : 6m 7s
+CPU hours   : 1.0
+Succeeded   : 2
+
+
