@@ -279,17 +279,80 @@ The module processes specially formatted CSV files with the following convention
 Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifies sample mislabeling by testing whether observed gene expression matches the expression pattern predicted from an individual's genotype at strong eQTL positions.
 
 **Process Workflow**:
-1. **eQTL Selection**: Identifies top N eQTL (default: 100) with highest LOD scores from Module 8 significant QTLs, retaining only one peak per unique gene to avoid redundancy
-2. **Observed Expression Extraction**: Retrieves actual measured expression values for genes with strong eQTL
-3. **Predicted Expression Calculation**:
-   - Extracts genotype probabilities at eQTL marker positions using `qtl2::pull_genoprobpos()`
-   - Fits single-QTL models using `qtl2::fit1()` with `zerosum=FALSE` to preserve original scale
-   - Calculates predicted expression from genotype probabilities: `predicted = genoprob %*% coefficients`
-4. **Distance Matrix Computation**: Uses `lineup2::dist_betw_matrices()` to calculate RMS distances between all pairs of observed and predicted expression profiles
-5. **Mixup Detection**:
-   - Extracts self-distances using `lineup2::get_self()` (observed vs own predicted)
-   - Identifies minimum distances using `lineup2::get_best()` (observed vs any predicted)
-   - Flags samples where self-distance exceeds minimum distance to any other sample's predicted expression
+
+1. **eQTL Selection - Creating the Genotype-Expression Signature**:
+   - Takes significant QTLs from Module 8 and sorts by LOD score (highest first)
+   - Retains **only one peak per unique gene** to avoid redundancy (strongest eQTL per gene)
+   - Selects top N genes (default: 100) with the strongest genotype-expression relationships
+   - **Rationale**: Strong eQTL positions are where genotype robustly predicts expression, providing reliable "fingerprint" information
+   - If fewer than N unique genes are available, uses all available eQTL
+   - LOD range of selected eQTL is logged for quality assessment
+
+2. **Observed Expression Extraction - The Measured Data**:
+   - Creates an observed expression matrix: **samples × 100 genes**
+   - Each value represents the **actual measured expression** from RNA-seq for that gene in that sample
+   - This serves as the "ground truth" molecular phenotype data
+   - Matrix dimensions validated and logged (e.g., "200 samples × 100 genes")
+   - **Example**: If Sample001 has normalized expression of 2.34 for Gene1, this exact value is stored in the observed matrix
+
+3. **Predicted Expression Calculation - Genotype-Based Prediction**:
+
+   **For each of the 100 selected genes:**
+
+   a. **Extract genotype probabilities at eQTL position** using `qtl2::pull_genoprobpos()`:
+      - For a gene with eQTL on chr12 at 85.3 Mbp, extracts each sample's **founder haplotype probabilities** at that exact genomic position
+      - DO mice have 8 founder strains (A/J, C57BL/6J, 129S1, NOD, NZO, CAST, PWK, WSB), yielding 8 probabilities per sample
+      - **Example**: Sample001 might have [A/J: 0.05, C57BL/6J: 0.70, 129S1: 0.03, NOD: 0.01, NZO: 0.02, CAST: 0.15, PWK: 0.02, WSB: 0.02]
+      - Interpretation: This sample is 70% likely to carry the C57BL/6J allele and 15% likely to carry the CAST allele at this eQTL
+
+   b. **Fit single-QTL model to estimate founder allele effects** using `qtl2::fit1()`:
+      - Performs linear regression: `Expression ~ Genotype` using **all samples' data**
+      - Parameter `zerosum=FALSE` preserves the original expression scale
+      - Estimates **8 founder allele effects** representing the mean expression level for each founder haplotype
+      - **Example output**: [A/J: 1.23, C57BL/6J: 2.87, 129S1: 0.45, NOD: 1.12, NZO: 0.89, CAST: -1.34, PWK: 0.67, WSB: 1.05]
+      - **Biological interpretation**: At this eQTL, carrying the C57BL/6J allele increases expression to 2.87, while carrying the CAST allele decreases it to -1.34
+
+   c. **Calculate predicted expression** via matrix multiplication:
+      - For each sample, multiplies their genotype probabilities by the founder allele effects
+      - Formula: `predicted_expression = genotype_probabilities %*% founder_effects`
+      - **Worked example for Sample001**:
+        ```
+        Predicted = (0.05 × 1.23) + (0.70 × 2.87) + (0.03 × 0.45) + (0.01 × 1.12) +
+                    (0.02 × 0.89) + (0.15 × -1.34) + (0.02 × 0.67) + (0.02 × 1.05)
+                  = 0.06 + 2.01 + 0.01 + 0.01 + 0.02 - 0.20 + 0.01 + 0.02
+                  = 1.94
+        ```
+      - This process repeats for all 100 genes, creating a **predicted expression matrix: samples × 100 genes**
+      - **Key concept**: Each sample's predicted expression is a weighted average based on which founder alleles they carry
+
+4. **Distance Matrix Computation - Comparing Observed vs Predicted Patterns**:
+   - Uses `lineup2::dist_betw_matrices()` to calculate **RMS (root mean square) distances**
+   - Compares each sample's **observed expression** (100 real measurements) with every sample's **predicted expression** (100 genotype-based predictions)
+   - Creates a **samples × samples distance matrix** where entry (i,j) represents how well Sample i's observed expression matches Sample j's genotype-predicted expression
+   - **Distance formula**: `RMS = sqrt(mean((observed_i - predicted_j)²))` across all 100 genes
+   - **Matrix interpretation**:
+     - **Diagonal elements** (e.g., Sample001 obs vs Sample001 pred): "self-distance" = how well that sample's genotype predicts its own expression
+     - **Off-diagonal elements** (e.g., Sample001 obs vs Sample002 pred): distance to other samples' predicted patterns
+   - **Example distance matrix**:
+     ```
+                     Sample001_pred  Sample002_pred  Sample003_pred
+     Sample001_obs        0.23           1.87           2.45
+     Sample002_obs        1.92           0.18           2.11
+     Sample003_obs        2.34           2.09           0.31
+     ```
+   - **Normal pattern**: Diagonal values (self-distances) should be smallest in each row
+   - **Mix-up pattern**: Off-diagonal value is smaller than diagonal, indicating observed expression matches a different sample's genotype
+
+5. **Mixup Detection - Identifying Mislabeled Samples**:
+   - **Extracts self-distances** using `lineup2::get_self()`: Diagonal values showing how well each sample's genotype predicts its own expression
+   - **Identifies minimum distances** using `lineup2::get_best()`: For each sample, finds the smallest distance to ANY sample's predicted expression (including self)
+   - **Flags potential mix-ups**: Samples where `self_distance > min_distance`
+   - **Interpretation**:
+     - **Normal sample**: Self-distance ≈ minimum distance (genotype correctly predicts own expression)
+     - **Mix-up detected**: Self-distance > minimum distance (observed expression matches a different sample's genotype better than own genotype)
+   - **Example normal sample**: Sample001 has self_distance = 0.23, min_distance = 0.23, best_match = Sample001
+   - **Example mix-up**: Sample042 has self_distance = 3.12, min_distance = 0.21, best_match = Sample087 → Sample labels likely swapped
+   - All per-sample statistics exported to CSV for manual review and investigation
 
 **Input Requirements**:
 - **cross2_file**: Cross2 object from Module 4 (`results/04_cross2_creation/{prefix}_cross2_object.rds`)
