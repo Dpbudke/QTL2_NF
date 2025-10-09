@@ -147,6 +147,11 @@ process PREPARE_QTLVIEWER_DATA {
 
     # 6a. ANNOT.PHENOTYPE - Phenotype annotations
     pheno_names <- colnames(cross2\$pheno)
+
+    # Mark first phenotype as ID column (QTL Viewer requires exactly one is.id = TRUE)
+    is_id_col <- rep(FALSE, length(pheno_names))
+    is_id_col[1] <- TRUE
+
     annot.phenotype <- tibble(
         data.name = pheno_names,
         short.name = pheno_names,  # Could be customized
@@ -155,7 +160,7 @@ process PREPARE_QTLVIEWER_DATA {
         units = rep("units", length(pheno_names)),  # Customize as needed
         category = rep("general", length(pheno_names)),
         R.category = rep("general", length(pheno_names)),
-        is.id = rep(FALSE, length(pheno_names)),
+        is.id = is_id_col,
         is.numeric = rep(TRUE, length(pheno_names)),
         is.date = rep(FALSE, length(pheno_names)),
         is.factor = rep(FALSE, length(pheno_names)),
@@ -219,25 +224,37 @@ process PREPARE_QTLVIEWER_DATA {
     lod.peaks <- list()
 
     # Create additive LOD peaks from significant QTLs
-    if (nrow(significant_qtls) > 0) {
-        # Map QTL results to required format
-        if ("lodcolumn" %in% colnames(significant_qtls)) {
-            # Use lodcolumn as data.name
-            additive_peaks <- tibble(
-                data.name = significant_qtls\$lodcolumn,
-                marker.id = paste0("marker_", significant_qtls\$chr, "_", round(significant_qtls\$pos, 3)),
-                lod = significant_qtls\$lod
-            )
-        } else {
-            # Create minimal peaks structure
-            additive_peaks <- tibble(
-                data.name = character(0),
-                marker.id = character(0),
-                lod = numeric(0)
-            )
+    if (nrow(significant_qtls) > 0 && "lodcolumn" %in% colnames(significant_qtls)) {
+        # Find nearest marker for each QTL peak position
+        qtl_marker_ids <- character(nrow(significant_qtls))
+
+        for (i in 1:nrow(significant_qtls)) {
+            qtl_chr <- as.character(significant_qtls\$chr[i])
+            qtl_pos <- significant_qtls\$pos[i]
+
+            # Get markers on same chromosome
+            chr_markers <- markers[markers\$chr == qtl_chr, ]
+
+            if (nrow(chr_markers) > 0) {
+                # Find nearest marker by position
+                distances <- abs(chr_markers\$pos - qtl_pos)
+                nearest_idx <- which.min(distances)
+                qtl_marker_ids[i] <- chr_markers\$marker.id[nearest_idx]
+            } else {
+                qtl_marker_ids[i] <- NA_character_
+            }
         }
+
+        # Create peaks tibble with matched marker IDs
+        additive_peaks <- tibble(
+            data.name = significant_qtls\$lodcolumn,
+            marker.id = qtl_marker_ids,
+            lod = significant_qtls\$lod
+        ) %>% filter(!is.na(marker.id))  # Remove any QTLs without matched markers
+
     } else {
-        # No significant QTLs found - create empty structure
+        # No significant QTLs - create empty structure
+        cat("Warning: No significant QTLs found\\n")
         additive_peaks <- tibble(
             data.name = character(0),
             marker.id = character(0),
@@ -410,11 +427,15 @@ services:
     image: churchilllab/qtl2web:1.6.1
     container_name: qtl2web-${prefix}
     ports:
-      - "8000:8000"
+      - "8000:80"
+    volumes:
+      - ./data/sqlite:/app/qtl2rest/data/sqlite
     depends_on:
       - qtl2rest
     environment:
       - QTL2REST_URL=http://qtl2rest:8001
+      - CONTAINER_DIR_QTL2WEB_CACHE=/app/cache
+      - CONTAINER_CACHE_NAME=qtl2web_cache
     networks:
       - qtlviewer-network
     restart: unless-stopped

@@ -279,24 +279,29 @@ The module processes specially formatted CSV files with the following convention
 Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifies sample mislabeling by testing whether observed gene expression matches the expression pattern predicted from an individual's genotype at strong eQTL positions.
 
 **Process Workflow**:
-1. **eQTL Selection**: Identifies top N eQTL (default: 100) with highest LOD scores from Module 8 significant QTLs
+1. **eQTL Selection**: Identifies top N eQTL (default: 100) with highest LOD scores from Module 8 significant QTLs, retaining only one peak per unique gene to avoid redundancy
 2. **Observed Expression Extraction**: Retrieves actual measured expression values for genes with strong eQTL
 3. **Predicted Expression Calculation**:
-   - Extracts genotype probabilities at eQTL marker positions
+   - Extracts genotype probabilities at eQTL marker positions using `qtl2::pull_genoprobpos()`
    - Fits single-QTL models using `qtl2::fit1()` with `zerosum=FALSE` to preserve original scale
    - Calculates predicted expression from genotype probabilities: `predicted = genoprob %*% coefficients`
 4. **Distance Matrix Computation**: Uses `lineup2::dist_betw_matrices()` to calculate RMS distances between all pairs of observed and predicted expression profiles
-5. **Mixup Detection**: Identifies samples where self-distance (observed vs own predicted) exceeds minimum distance to any other sample's predicted expression
+5. **Mixup Detection**:
+   - Extracts self-distances using `lineup2::get_self()` (observed vs own predicted)
+   - Identifies minimum distances using `lineup2::get_best()` (observed vs any predicted)
+   - Flags samples where self-distance exceeds minimum distance to any other sample's predicted expression
 
 **Input Requirements**:
 - **cross2_file**: Cross2 object from Module 4 (`results/04_cross2_creation/{prefix}_cross2_object.rds`)
 - **genoprob_file**: Genotype probabilities from Module 5 (`results/05_genome_scan_preparation/{prefix}_genoprob.rds`)
-- **expr_data_file**: Expression data matrix (RDS format: samples × genes, typically inverse-rank-normalized log2 CPM)
+- **expr_data_file**: Expression data matrix (RDS or CSV format: samples × genes, typically inverse-rank-normalized log2 CPM)
+  - RDS: Matrix object with samples as rows, genes as columns
+  - CSV: Comma-separated file with sample IDs as row names, gene IDs as column headers
 - **expr_peaks_file**: eQTL peaks CSV from Module 8 (`results/08_significant_qtls/{prefix}_significant_qtls.csv`)
 - **n_top_eqtl**: Number of top eQTL to analyze (default: 100, adjustable based on dataset size)
 
 **Output Files** (`results/mixup_qc/`):
-- **{prefix}_mixup_report.html**: Interactive HTML QC report with summary statistics
+- **{prefix}_mixup_report.html**: Minimal HTML report displaying count of samples with potential problems
 - **{prefix}_mixup_problems.csv**: Per-sample analysis with columns:
   - `sample`: Sample identifier
   - `self_distance`: RMS distance between observed and own predicted expression
@@ -304,16 +309,23 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
   - `best_match`: Sample ID with closest predicted expression match
   - `is_problem`: Boolean flag (TRUE if self_distance > min_distance, indicating potential mixup)
 - **{prefix}_distance_matrix.csv**: Full RMS distance matrix (observed samples × predicted samples)
-- **{prefix}_mixup_plots.pdf**: Diagnostic scatter plot (self distance vs minimum distance)
-  - Points below diagonal (red) indicate potential mix-ups
+- **{prefix}_mixup_plots.jpg**: Diagnostic scatter plot (self distance vs minimum distance, 300 DPI JPEG format)
+  - Points below diagonal (red) indicate potential mix-ups where self-distance exceeds minimum distance
   - Gray points represent samples with consistent genotype-expression relationships
+  - Blue dashed line represents y = x diagonal (threshold for problem detection)
 - **mixup_qc_log.txt**: Detailed analysis log with timestamps and processing statistics
 
+**Technical Implementation Notes**:
+- Module automatically installs `lineup2` package from CRAN if not available in the R environment
+- Uses writable R library path in Nextflow work directory to handle package installation
+- Handles both RDS and CSV input formats for expression data with automatic format detection
+- Extracts genetic map from cross2 object (gmap preferred, falls back to pmap if unavailable)
+
 **Interpretation Guidelines**:
-- **Normal samples**: Self-distance ≈ minimum distance (points near diagonal)
-- **Potential mix-ups**: Self-distance > minimum distance (points below diagonal)
-- **Action required**: Investigate `best_match` to identify likely correct sample identity
-- **Threshold considerations**: Small deviations may reflect biological variation; focus on substantial differences
+- **Normal samples**: Self-distance ≈ minimum distance (points near diagonal on scatter plot)
+- **Potential mix-ups**: Self-distance > minimum distance (points below diagonal, colored red)
+- **Action required**: Investigate `best_match` column to identify likely correct sample identity
+- **Threshold considerations**: Small deviations may reflect biological variation; focus on substantial differences where self-distance substantially exceeds minimum distance
 
 **Usage**: Run as standalone QC analysis after Module 8 when expression data is available
 
