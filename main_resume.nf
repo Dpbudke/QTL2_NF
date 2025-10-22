@@ -133,7 +133,7 @@ include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
-include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
+include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
 
 /*
 ========================================================================================
@@ -351,7 +351,8 @@ workflow {
                 GENOME_SCAN_SETUP.out.chunk_file,
                 GENOME_SCAN_SETUP.out.batch_file,
                 ch_study_prefix,
-                Channel.value(params.lod_threshold)
+                Channel.value(params.lod_threshold),
+                Channel.value(params.interactive_covar)
             )
 
             // Check if we need to run COMBINE or if batch results already exist
@@ -541,26 +542,20 @@ workflow {
         // Use --run_qtlviewer to enable this module
         if (params.run_qtlviewer || shouldRunStep('qtlviewer', params.resume_from)) {
             log.info "Running QTL Viewer setup (local deployment only)"
-            log.info "Module 9 will auto-detect whether to use filtered or full cross2"
+            log.info "Using genoprobs (not alleleprobs) for QTL Viewer compatibility"
 
             PREPARE_QTLVIEWER_DATA(
-                ch_alleleprob,
+                ch_genoprob,         // Changed from ch_alleleprob
                 ch_kinship_loco,
                 ch_genetic_map,
+                ch_cross2_object,    // Added for pmap extraction
                 ch_scan_results,
                 ch_significant_qtls,
                 ch_study_prefix
             )
 
-            // SETUP_QTLVIEWER_DEPLOYMENT takes RData as input to create dependency
-            // but reads the actual file from results directory (which PREPARE writes directly)
-            SETUP_QTLVIEWER_DEPLOYMENT(
-                PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-                ch_study_prefix
-            )
-
             PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-            SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+            PREPARE_QTLVIEWER_DATA.out.instructions.view { "QTL Viewer instructions: $it" }
         } else {
             log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (designed for local deployment)"
         }

@@ -153,7 +153,7 @@ cat("Metadata prefix patterns:", paste(metadata_pattern, collapse = ", "), "\n")
 cat("Phenotype prefix patterns:", paste(phenotype_pattern, collapse = ", "), "\n")
 ```
 
-# 5. Generate r/qtl2 - QTL2_NF input 
+# 5. Generate r/qtl2 - QTL2_NF input
 
 ```{r}
 # Step 4: Transpose phenotype data (samples as rows, transcripts as columns)

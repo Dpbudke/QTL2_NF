@@ -81,6 +81,7 @@ process GENOME_SCAN_BATCH {
     path(batch_file)
     val(prefix)
     val(lod_threshold)
+    val(interactive_covar)
 
     output:
     path("${prefix}_batch${batch_id}_results.rds"), emit: batch_results
@@ -120,6 +121,9 @@ process GENOME_SCAN_BATCH {
     kinship <- readRDS("${kinship_file}")
 
     # Prepare covariates (convert categorical to numeric)
+    addcovar <- NULL
+    intcovar <- NULL
+
     if(!is.null(cross2\$covar)) {
         # Remove coat_color if present (genetic phenotype, not a covariate)
         covar_data <- cross2\$covar
@@ -128,13 +132,41 @@ process GENOME_SCAN_BATCH {
             log_message("Removed coat_color from covariates (genetic phenotype)")
         }
 
-        # Build formula for all covariates
-        covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
-        addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
-        log_message(paste("Additive covariates:", ncol(covar_data), "covariates expanded to", ncol(addcovar), "numeric columns"))
+        # Check if interactive covariate is specified
+        interactive_covar_name <- "${interactive_covar}"
+
+        if(interactive_covar_name != "null" && interactive_covar_name != "") {
+            # Validate that the interactive covariate exists
+            if(!(interactive_covar_name %in% colnames(covar_data))) {
+                stop(paste("Interactive covariate", interactive_covar_name, "not found in covariate data. Available:", paste(colnames(covar_data), collapse=", ")))
+            }
+
+            # Split covariates into additive and interactive
+            intcovar_data <- covar_data[, interactive_covar_name, drop = FALSE]
+            addcovar_data <- covar_data[, !colnames(covar_data) %in% interactive_covar_name, drop = FALSE]
+
+            # Build interactive covariate matrix
+            intcovar_formula <- paste("~", interactive_covar_name)
+            intcovar <- model.matrix(as.formula(intcovar_formula), data = intcovar_data)[, -1, drop = FALSE]
+            log_message(paste("Interactive covariate:", interactive_covar_name, "expanded to", ncol(intcovar), "numeric columns"))
+
+            # Build additive covariate matrix (if any remain)
+            if(ncol(addcovar_data) > 0) {
+                addcovar_formula <- paste("~", paste(colnames(addcovar_data), collapse = " + "))
+                addcovar <- model.matrix(as.formula(addcovar_formula), data = addcovar_data)[, -1, drop = FALSE]
+                log_message(paste("Additive covariates:", ncol(addcovar_data), "covariates expanded to", ncol(addcovar), "numeric columns"))
+            } else {
+                log_message("No additive covariates (all moved to interactive)")
+            }
+        } else {
+            # No interactive covariate - use all as additive (original behavior)
+            covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
+            addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+            log_message(paste("Additive covariates:", ncol(covar_data), "covariates expanded to", ncol(addcovar), "numeric columns"))
+            log_message("No interactive covariate specified - using additive model only")
+        }
     } else {
-        addcovar <- NULL
-        log_message("No additive covariates found")
+        log_message("No covariates found in cross2 object")
     }
 
     # Get X chromosome covariates
@@ -184,6 +216,7 @@ process GENOME_SCAN_BATCH {
                 pheno = pheno_subset,
                 kinship = kinship,
                 addcovar = addcovar,
+                intcovar = intcovar,
                 Xcovar = Xcovar,
                 cores = 0  # Use all available cores
             )

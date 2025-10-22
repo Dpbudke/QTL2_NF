@@ -454,10 +454,10 @@ tail -f .nextflow.log
 # Complete eQTL analysis with comprehensive parameter set
 nextflow run main.nf \
   --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
-  --finalreport_files 'Data/FinalReport*.txt' \
-  --study_prefix DOchln_eQTL \
+  --finalreport_files 'Data/*FinalReport*.txt' \
+  --study_prefix DOchln \
   --lod_threshold 7.0 \
-  --outdir results/eQTL_analysis \
+  --outdir results/ \
   -profile standard
 ```
 
@@ -543,19 +543,19 @@ The pipeline provides precise resume functionality using `main_resume.nf`, enabl
 ```bash
 # Resume from genome scan preparation (skip data processing modules)
 nextflow run main_resume.nf \
-  --resume_from 05 \
+  --resume_from prepare_scan \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
 # Resume from HPC array genome scanning (most common restart point)
 nextflow run main_resume.nf \
-  --resume_from 06 \
+  --resume_from qtl_analysis \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
 # Resume from permutation testing (after scan completion)
 nextflow run main_resume.nf \
-  --resume_from 07 \
+  --resume_from permutation \
   --study_prefix DOchln \
   --lod_threshold 7.0
 

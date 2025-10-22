@@ -9,4 +9,6 @@ singularity_cache/
 .claude/
 CLAUDE.md
 results
+Results_w_outliers
 Temp/
+logs

@@ -1,8 +1,8 @@
 #!/usr/bin/env nextflow
 
 // Simplified Single-Phenotype Permutation Testing Module
-// New Architecture: 1 batch = 1 phenotype × 50 permutations = 1 SLURM job
-// Benefits: Real-time progress monitoring, faster failure detection, simpler code
+// New Architecture: 1 batch = 1 phenotype × 200 permutations = 1 SLURM job
+// Benefits: Real-time progress monitoring, faster failure detection, simpler code, optimized resource usage
 
 process PERM_SETUP {
     tag "Setting up permutation testing"
@@ -38,7 +38,7 @@ process PERM_SETUP {
     }
 
     log_message("=== SIMPLIFIED PERMUTATION SETUP ===")
-    log_message("New Architecture: 1 batch = 1 phenotype × 50 perms")
+    log_message("New Architecture: 1 batch = 1 phenotype × 200 perms")
     log_message("Loading data...")
 
     # Load full cross2 object
@@ -66,8 +66,8 @@ process PERM_SETUP {
 
     # Calculate batch structure
     num_phenotypes <- ncol(cross2\$pheno)
-    perms_per_batch <- 50  # Fixed: 50 perms per batch
-    batches_per_pheno <- 20  # Fixed: 20 batches per phenotype (50 × 20 = 1000 total)
+    perms_per_batch <- 200  # Fixed: 200 perms per batch (4x original 50)
+    batches_per_pheno <- 5   # Fixed: 5 batches per phenotype (200 × 5 = 1000 total)
     total_batches <- num_phenotypes * batches_per_pheno
 
     log_message("")
@@ -79,11 +79,11 @@ process PERM_SETUP {
     log_message(paste("Total permutations:", num_phenotypes * 1000))
     log_message("")
     log_message("=== RESOURCE ALLOCATION ===")
-    log_message(paste("CPUs per batch: 96 (PSOCK cluster - efficient memory sharing)"))
-    log_message(paste("Memory per batch: 100 GB (drastically reduced vs fork parallelism)"))
-    log_message(paste("Max parallel batches: 20 (1,920 / 1,990 CPUs)"))
-    log_message(paste("Estimated time per batch: 5-10 minutes"))
-    log_message(paste("Estimated total time:", round(total_batches * 7.5 / 60 / 20, 1), "hours (with 20 parallel)"))
+    log_message(paste("CPUs per batch: 48 (fork-based parallelism)"))
+    log_message(paste("Memory per batch: 200 GB (optimized for 200 perms, ~164GB avg usage)"))
+    log_message(paste("Max parallel batches: ~35-40 (observed on ceres cluster)"))
+    log_message(paste("Estimated time per batch: 6-8 minutes (200 perms each, ~2x 100-perm time)"))
+    log_message(paste("Estimated total time:", round(total_batches * 7 / 60 / 35, 1), "hours (with 35 parallel)"))
     log_message("")
 
     # Create phenotype list (write each phenotype name for iteration)
@@ -98,16 +98,16 @@ process PERM_SETUP {
 }
 
 process PERM_BATCH_JOB {
-    tag "Perm: \${phenotype_name} batch \${batch_num}/20"
+    tag "Perm: \${phenotype_name} batch \${batch_num}/5"
     publishDir "${params.outdir}/07_permutation_testing/batches", mode: 'copy'
 
     // Single phenotype, single batch
-    // 48 CPUs and 100GB per batch (verified via testing: ~94GB average usage)
+    // 48 CPUs and 200GB per batch (optimized for 200 perms per batch, ~164GB avg usage)
 
     input:
     val(study_prefix)
     val(phenotype_name)
-    val(batch_num)  // 1-10 (100 perms each)
+    val(batch_num)  // 1-5 (200 perms per batch)
 
     output:
     path("${study_prefix}_${phenotype_name}_batch_${batch_num}.rds"), emit: perm_result
@@ -123,9 +123,9 @@ process PERM_BATCH_JOB {
     batch_start_time <- Sys.time()
 
     cat("===========================================\\n")
-    cat("BATCH:", "${batch_num}", "/ 20\\n")
+    cat("BATCH:", "${batch_num}", "/ 5\\n")
     cat("PHENOTYPE:", "${phenotype_name}\\n")
-    cat("PERMUTATIONS: 50\\n")
+    cat("PERMUTATIONS: 200\\n")
     cat("START TIME:", format(batch_start_time), "\\n")
     cat("===========================================\\n\\n")
 
@@ -178,7 +178,7 @@ process PERM_BATCH_JOB {
 
     cat("Running permutation test...\\n")
     cat("Phenotype:", "${phenotype_name}\\n")
-    cat("Permutations: 50\\n")
+    cat("Permutations: 200\\n")
     cat("CPUs: 48 (fork-based parallelism with shared memory)\\n\\n")
 
     perm_start <- Sys.time()
@@ -186,7 +186,7 @@ process PERM_BATCH_JOB {
     # Run permutations with fork-based parallelism (cores=48)
     # Fork shares memory on Linux - no data serialization like PSOCK
     # All 48 cores share the same alleleprob/kinship data in memory
-    cat("Starting scan1perm() with 50 permutations using 48 cores (fork-based)...\\n")
+    cat("Starting scan1perm() with 200 permutations using 48 cores (fork-based)...\\n")
     flush.console()
 
     perm <- scan1perm(alleleprob_auto,
@@ -195,7 +195,7 @@ process PERM_BATCH_JOB {
                       addcovar = addcovar,
                       Xcovar = Xcovar,
                       cores = 48,  # Fork-based parallelism - shares memory
-                      n_perm = 50)
+                      n_perm = 200)
 
     cat("✓ scan1perm() completed successfully\\n")
 
@@ -212,7 +212,7 @@ process PERM_BATCH_JOB {
     cat("BATCH COMPLETE\\n")
     cat("===========================================\\n")
     cat("Phenotype:", "${phenotype_name}\\n")
-    cat("Batch:", "${batch_num}", "/ 20\\n")
+    cat("Batch:", "${batch_num}", "/ 5\\n")
     cat("Total time:", round(total_time / 60, 2), "minutes\\n")
     cat("Permutation time:", round(perm_time / 60, 2), "minutes\\n")
     cat("Data loading time:", round(load_time, 1), "seconds\\n")
@@ -352,7 +352,7 @@ workflow CHUNKED_PERMUTATION_TESTING {
         study_prefix
         lod_threshold
         run_benchmark  // Ignored in new design
-        perm_per_chunk  // Ignored - always 100
+        perm_per_chunk  // Ignored - always 200
         chunks_per_batch  // Ignored - always 1
 
     main:
@@ -374,47 +374,60 @@ workflow CHUNKED_PERMUTATION_TESTING {
             ch_filtered_phenotypes = Channel.fromPath("${params.outdir}/07_permutation_testing/${params.study_prefix}_filtered_phenotypes_lod${params.lod_threshold}.txt")
             ch_aggregation_log = Channel.fromPath("${params.outdir}/07_permutation_testing/${params.study_prefix}_aggregation_log.txt")
 
-        } else if (file(batch_results_dir).exists() && file(batch_results_dir).list().size() > 0) {
-            log.info "Found existing batch results in ${batch_results_dir}"
-            log.info "Skipping PERM_BATCH_JOB - proceeding to aggregation"
-
-            // Read from published batch directory instead of channel collection
-            Channel.fromPath("${batch_results_dir}/${params.study_prefix}_*_batch_*.rds")
-                .collect()
-                .set { ch_batch_perm_files }
-
-            PERM_AGGREGATE(
-                ch_batch_perm_files,
-                study_prefix,
-                lod_threshold
-            )
-
-            ch_perm_matrix = PERM_AGGREGATE.out.full_perm_matrix
-            ch_perm_thresholds = PERM_AGGREGATE.out.perm_thresholds
-            ch_filtered_phenotypes = PERM_AGGREGATE.out.significant_phenotypes
-            ch_aggregation_log = PERM_AGGREGATE.out.aggregation_log
-
         } else {
-            log.info "No existing batch results found - running full permutation workflow"
+            // Check for existing batch results
+            def existing_batches = []
+            if (file(batch_results_dir).exists()) {
+                existing_batches = file("${batch_results_dir}/${params.study_prefix}_*_batch_*.rds").collect { it.name }
+            }
 
-            // Step 2: Create channel for all batches
-            // For each phenotype, create 20 batch jobs (50 perms each)
-            phenotype_batches = PERM_SETUP.out.phenotype_list
+            def num_existing = existing_batches.size()
+
+            log.info "=== PERMUTATION BATCH RESUME STATUS ==="
+            log.info "Found ${num_existing} existing batch results"
+
+            if (num_existing > 0) {
+                log.info "Resuming - will skip ${num_existing} completed batches"
+            } else {
+                log.info "No existing batch results found - running full permutation workflow"
+            }
+
+            // Step 2: Create channel for all batches, then filter out existing ones
+            // For each phenotype, create 5 batch jobs (200 perms each)
+            def all_batches = PERM_SETUP.out.phenotype_list
                 .splitText()
                 .map { it.trim() }
-                .combine(Channel.from(1..20))  // 20 batches per phenotype (50 perms each)
+                .combine(Channel.from(1..5))  // 5 batches per phenotype
 
-            // Step 3: Execute permutation batch jobs (all submitted, 20 run in parallel)
+            // Filter to only include batches that don't already exist
+            phenotype_batches = all_batches
+                .filter { phenotype_name, batch_num ->
+                    def batch_file_name = "${params.study_prefix}_${phenotype_name}_batch_${batch_num}.rds"
+                    def exists = existing_batches.contains(batch_file_name)
+                    return !exists
+                }
+
+            // Step 3: Execute permutation batch jobs (only missing ones)
             PERM_BATCH_JOB(
                 study_prefix,                     // study_prefix (value channel)
                 phenotype_batches.map { it[0] },  // phenotype_name
                 phenotype_batches.map { it[1] }   // batch_num
             )
 
-            // Step 4: Aggregate all results using standard channel collection
-            // The publishDir directive ensures results are saved to stable directory
+            // Step 4: Combine newly completed batches with existing ones for aggregation
+            // Collect newly generated batches
+            def ch_new_batches = PERM_BATCH_JOB.out.perm_result.collect()
+
+            // Read existing batches from published directory
+            def ch_existing_batches = num_existing > 0 ?
+                Channel.fromPath("${batch_results_dir}/${params.study_prefix}_*_batch_*.rds").collect() :
+                Channel.empty()
+
+            // Combine both channels for aggregation
+            def ch_all_batches = ch_new_batches.mix(ch_existing_batches).collect()
+
             PERM_AGGREGATE(
-                PERM_BATCH_JOB.out.perm_result.collect(),
+                ch_all_batches,
                 study_prefix,
                 lod_threshold
             )
