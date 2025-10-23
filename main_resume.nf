@@ -488,8 +488,8 @@ workflow {
         } else if (params.resume_from == 'perm_aggregate') {
             log.info "Running only PERM_AGGREGATE - using existing batch results"
 
-            // Collect batch result files from the specific PERM_AGGREGATE work directory
-            ch_batch_results = Channel.fromPath("nextflow_work/61/1a7b0ce0ae36aa7b2b6867dd3f4d31/${params.study_prefix}_*_batch_*.rds")
+            // Collect batch result files from the published batches directory
+            ch_batch_results = Channel.fromPath("${params.outdir}/07_permutation_testing/batches/${params.study_prefix}_*_batch_*.rds")
                 .collect()
 
             PERM_AGGREGATE(
