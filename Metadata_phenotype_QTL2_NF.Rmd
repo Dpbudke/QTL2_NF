@@ -153,6 +153,10 @@ cat("Metadata prefix patterns:", paste(metadata_pattern, collapse = ", "), "\n")
 cat("Phenotype prefix patterns:", paste(phenotype_pattern, collapse = ", "), "\n")
 ```
 
+```{r}
+### Key Note: this section SHOULD have the filtering out of Broman mixups identified, but somehow it got deleted 
+```
+
 # 5. Generate r/qtl2 - QTL2_NF input
 
 ```{r}

@@ -32,7 +32,7 @@ def helpMessage() {
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
-        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - local deployment only) [default: false]
+        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - supports HPC and local deployment) [default: false]
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
@@ -43,7 +43,7 @@ def helpMessage() {
         Module 6: HPC array-based genome scanning
         Module 7: Chunked permutation testing (DO_Pipe approach - 1000 permutations)
         Module 8: Significant QTL identification
-        Module 9: QTL Viewer setup (OPTIONAL - use --run_qtlviewer, local deployment only)
+        Module 9: QTL Viewer setup (OPTIONAL - use --run_qtlviewer, supports HPC and local deployment)
     
     Example:
         nextflow run main.nf \\
@@ -107,7 +107,8 @@ include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
-include { PREPARE_QTLVIEWER_DATA; SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'
+include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
+// include { SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'  // Process doesn't exist in module
 
 /*
 ========================================================================================
@@ -132,6 +133,7 @@ workflow {
     // Create input channels
     ch_phenotype_file = Channel.fromPath(params.phenotype_file, checkIfExists: true)
     ch_study_prefix   = Channel.value(params.study_prefix)
+    ch_gtf_file       = Channel.fromPath(params.gtf_file, checkIfExists: true)
     
     // MODULE 1: Phenotype Processing
     PHENOTYPE_PROCESS(
@@ -286,11 +288,11 @@ workflow {
             ch_study_prefix
         )
 
-        // MODULE 9: QTL Viewer Integration (Optional - for local deployment only)
-        // NOTE: Module 9 is designed for local deployment and requires significant memory
+        // MODULE 9: QTL Viewer Integration (Optional - supports HPC and local deployment)
+        // NOTE: Module 9 can be deployed on HPC or locally via Docker/Singularity
         // This module is skipped by default. Use --run_qtlviewer to enable
         if (params.run_qtlviewer) {
-            log.info "Running QTL Viewer setup (local deployment only)"
+            log.info "Running QTL Viewer setup (supports HPC and local deployment)"
 
             PREPARE_QTLVIEWER_DATA(
                 PREPARE_GENOME_SCAN_SETUP.out.genoprob,  // Changed from alleleprob
@@ -299,21 +301,22 @@ workflow {
                 CREATE_CROSS2_OBJECT.out.cross2_object,  // Added for pmap extraction
                 COMBINE_BATCH_RESULTS.out.scan_results,
                 IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                ch_gtf_file,
                 ch_study_prefix
             )
 
-            SETUP_QTLVIEWER_DEPLOYMENT(
-                PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-                ch_study_prefix
-            )
+            // SETUP_QTLVIEWER_DEPLOYMENT(
+            //     PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
+            //     ch_study_prefix
+            // )
 
             // Display results for Module 9
             PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-            SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
-            SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
-            SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
+            // SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
+            // SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
+            // SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
         } else {
-            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (designed for local deployment)"
+            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (supports HPC and local deployment)"
         }
 
         // Display results for Modules 5-8

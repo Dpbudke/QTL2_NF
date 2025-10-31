@@ -12,6 +12,7 @@ process PREPARE_QTLVIEWER_DATA {
     path(cross2_file)
     path(scan_results_file)
     path(significant_qtls_file)
+    path(gtf_file)
     val(prefix)
 
     output:
@@ -139,60 +140,58 @@ process PREPARE_QTLVIEWER_DATA {
     }
 
     # 3. LOAD GENE ANNOTATIONS
-    cat("Loading gene annotations...\\n")
+    cat("Loading gene annotations from GTF file...\\n")
 
     # Get list of genes in phenotype data (these are Ensembl gene IDs)
     pheno_genes <- colnames(cross2\$pheno)
 
-    # For eQTL data, we need to create gene annotations
-    # Check if we have a GTF file from the pipeline
-    gtf_path <- file.path(workflow_dir, "${params.outdir}/03_control_file_generation/Mus_musculus.GRCm39.105.gtf")
+    # GTF file is provided as input (handles both .gtf and .gtf.gz)
+    gtf_path <- "${gtf_file}"
 
-    if (file.exists(gtf_path)) {
-        cat("Loading gene annotations from GTF file...\\n")
-        suppressPackageStartupMessages(library(rtracklayer))
+    cat(paste("GTF file:", gtf_path, "\\n"))
 
-        gtf <- import(gtf_path)
-        gtf_df <- as.data.frame(gtf)
-
-        # Extract gene annotations (type == "gene")
-        gene_annot <- gtf_df[gtf_df\$type == "gene", ]
-
-        # Filter to genes in our dataset and create annot.mrna
-        annot.mrna <- gene_annot[gene_annot\$gene_id %in% pheno_genes, ] %>%
-            dplyr::select(gene_id, gene_name, seqnames, start, end) %>%
-            dplyr::rename(
-                gene.id = gene_id,
-                symbol = gene_name,
-                chr = seqnames
-            ) %>%
-            mutate(
-                chr = as.character(chr),
-                start = start / 1e6,  # Convert to Mb
-                end = end / 1e6       # Convert to Mb
-            ) %>%
-            as_tibble()
-
-        validation_log <- c(validation_log, "=== Gene Annotations ===")
-        validation_log <- c(validation_log, paste("✓ GTF file found:", gtf_path))
-        validation_log <- c(validation_log, paste("✓ Genes annotated:", nrow(annot.mrna), "of", length(pheno_genes)))
-
-    } else {
-        cat("WARNING: GTF file not found, creating minimal annotations\\n")
-
-        # Create minimal annotations from physical map
-        annot.mrna <- tibble(
-            gene.id = pheno_genes,
-            symbol = pheno_genes,
-            chr = NA_character_,
-            start = NA_real_,
-            end = NA_real_
-        )
-
-        validation_log <- c(validation_log, "=== Gene Annotations ===")
-        validation_log <- c(validation_log, "WARNING: GTF file not found, using minimal annotations")
-        validation_log <- c(validation_log, paste("✓ Genes in dataset:", length(pheno_genes)))
+    if (!file.exists(gtf_path)) {
+        stop(paste("ERROR: GTF file not found:", gtf_path))
     }
+
+    suppressPackageStartupMessages(library(rtracklayer))
+
+    # rtracklayer handles .gz files automatically
+    gtf <- import(gtf_path)
+    gtf_df <- as.data.frame(gtf)
+
+    # Extract gene annotations (type == "gene")
+    gene_annot <- gtf_df[gtf_df\$type == "gene", ]
+
+    cat(paste("Total genes in GTF:", nrow(gene_annot), "\\n"))
+    cat(paste("Genes in phenotype data:", length(pheno_genes), "\\n"))
+
+    # Filter to genes in our dataset and create annot.mrna with all required fields
+    annot.mrna <- gene_annot[gene_annot\$gene_id %in% pheno_genes, ] %>%
+        dplyr::select(gene_id, gene_name, seqnames, start, end) %>%
+        dplyr::rename(
+            gene.id = gene_id,
+            symbol = gene_name,
+            chr = seqnames
+        ) %>%
+        mutate(
+            chr = as.character(chr),
+            start = start / 1e6,  # Convert to Mb
+            end = end / 1e6       # Convert to Mb
+        ) %>%
+        as_tibble()
+
+    # Report matching statistics
+    matched_genes <- nrow(annot.mrna)
+    missing_genes <- length(pheno_genes) - matched_genes
+
+    validation_log <- c(validation_log, "=== Gene Annotations ===")
+    validation_log <- c(validation_log, paste("✓ GTF file:", gtf_path))
+    validation_log <- c(validation_log, paste("✓ Genes matched:", matched_genes, "of", length(pheno_genes)))
+    if (missing_genes > 0) {
+        validation_log <- c(validation_log, paste("⚠ Genes not found in GTF:", missing_genes))
+    }
+    validation_log <- c(validation_log, paste("✓ Annotation columns: gene.id, symbol, chr, start, end"))
     validation_log <- c(validation_log, "")
 
     # 4. KINSHIP MATRICES - Validate and align with samples
@@ -548,7 +547,7 @@ process PREPARE_QTLVIEWER_DATA {
     validation_log <- c(validation_log, "=== QTL Viewer Data Conversion Complete ===")
     validation_log <- c(validation_log, "✓ Deployment follows official Churchill Lab documentation")
     validation_log <- c(validation_log, "✓ Species field configured in project.viewer.settings")
-    validation_log <- c(validation_log, "✓ Ready for local Docker deployment")
+    validation_log <- c(validation_log, "✓ Ready for HPC deployment (Singularity) or local deployment (Docker)")
 
     # Write validation report
     writeLines(validation_log, "qtlviewer_conversion_report.txt")
@@ -708,7 +707,7 @@ networks:
 
     validation_log <- c(validation_log, "✓ Cache directory created with write permissions")
 
-    # Create startup script
+    # Create startup script (for Docker local deployment)
     startup_script <- "#!/bin/bash
 
 echo \\"Starting QTL Viewer for study: ${prefix}\\"
@@ -764,11 +763,227 @@ fi
     writeLines(startup_script, "start_qtlviewer.sh")
     Sys.chmod("start_qtlviewer.sh", mode = "0755")
 
+    # Create HPC debugging script for troubleshooting multi-container issues
+    debug_script <- "#!/bin/bash
+#
+# QTL Viewer HPC Debug Script
+# Comprehensive diagnostics for troubleshooting multi-container deployment
+#
+
+set +e  # Don't exit on error - we want to collect all diagnostics
+
+STUDY_PREFIX=\\"${prefix}\\"
+LOG_FILE=\\"qtlviewer_debug_\\$(date +%Y%m%d_%H%M%S).log\\"
+
+# Color codes for output
+RED='\\\\033[0;31m'
+GREEN='\\\\033[0;32m'
+YELLOW='\\\\033[1;33m'
+BLUE='\\\\033[0;34m'
+NC='\\\\033[0m' # No Color
+
+# Logging functions
+log_section() {
+    echo \\"\\"\\" | tee -a \\$LOG_FILE
+    echo \\"========================================\\" | tee -a \\$LOG_FILE
+    echo \\"\\$1\\" | tee -a \\$LOG_FILE
+    echo \\"========================================\\" | tee -a \\$LOG_FILE
+}
+
+log_info() {
+    echo -e \\"\\${BLUE}[INFO]\\${NC} \\$1\\" | tee -a \\$LOG_FILE
+}
+
+log_success() {
+    echo -e \\"\\${GREEN}[✓]\\${NC} \\$1\\" | tee -a \\$LOG_FILE
+}
+
+log_error() {
+    echo -e \\"\\${RED}[✗]\\${NC} \\$1\\" | tee -a \\$LOG_FILE
+}
+
+log_warning() {
+    echo -e \\"\\${YELLOW}[!]\\${NC} \\$1\\" | tee -a \\$LOG_FILE
+}
+
+echo \\"QTL Viewer HPC Diagnostic Tool\\" | tee \\$LOG_FILE
+echo \\"Study: \\$STUDY_PREFIX\\" | tee -a \\$LOG_FILE
+echo \\"Timestamp: \\$(date)\\" | tee -a \\$LOG_FILE
+echo \\"Output: \\$LOG_FILE\\" | tee -a \\$LOG_FILE
+
+# 1. Check Singularity
+log_section \\"1. Singularity Environment\\"
+if command -v singularity &> /dev/null; then
+    log_success \\"Singularity is available\\"
+    singularity --version | tee -a \\$LOG_FILE
+else
+    log_error \\"Singularity not found in PATH\\"
+    log_info \\"Try: module load singularity\\"
+fi
+
+# 2. Check for container images
+log_section \\"2. Container Images\\"
+REQUIRED_IMAGES=(\\"qtl2rest_0.6.5.sif\\" \\"qtl2web_1.6.1.sif\\" \\"redis_7-alpine.sif\\" \\"ensimpl_latest.sif\\")
+for img in \\"\${REQUIRED_IMAGES[@]}\\"; do
+    if [ -f \\"\\$img\\" ]; then
+        log_success \\"Found: \\$img (\\$(du -h \\$img | cut -f1))\\"
+    else
+        log_error \\"Missing: \\$img\\"
+        log_info \\"Pull with: singularity pull docker://churchilllab/\\${img%.sif}\\"
+    fi
+done
+
+# 3. Check data files
+log_section \\"3. Data Files\\"
+if [ -f \\"data/rdata/\\${STUDY_PREFIX}.RData\\" ]; then
+    DATA_SIZE=\\$(du -h data/rdata/\\${STUDY_PREFIX}.RData | cut -f1)
+    log_success \\"RData file found: \\$DATA_SIZE\\"
+
+    # Try to inspect RData file
+    log_info \\"Attempting to load RData file...\\"
+    R --quiet --no-save << 'EOF' 2>&1 | tee -a \\$LOG_FILE
+    tryCatch({
+        load(\\"data/rdata/${prefix}.RData\\")
+        cat(\\"✓ RData loaded successfully\\\\n\\")
+        cat(sprintf(\\"  - ensembl.version: %s\\\\n\\", ensembl.version))
+        cat(sprintf(\\"  - ensembl.species: %s\\\\n\\", ensembl.species))
+        cat(sprintf(\\"  - genoprobs chromosomes: %d\\\\n\\", length(genoprobs)))
+        cat(sprintf(\\"  - markers: %d\\\\n\\", nrow(markers)))
+        cat(sprintf(\\"  - dataset.mrna genes: %d\\\\n\\", nrow(dataset.mrna\\$annot.mrna)))
+    }, error = function(e) {
+        cat(\\"✗ Error loading RData:\\\\n\\")
+        cat(sprintf(\\"  %s\\\\n\\", e\\$message))
+    })
+EOF
+else
+    log_error \\"RData file not found: data/rdata/\\${STUDY_PREFIX}.RData\\"
+fi
+
+if [ -f \\"data/sqlite/ccfoundersnps.sqlite\\" ]; then
+    SQLITE_SIZE=\\$(du -h data/sqlite/ccfoundersnps.sqlite | cut -f1)
+    log_success \\"SQLite database found: \\$SQLITE_SIZE\\"
+else
+    log_error \\"SQLite database not found\\"
+fi
+
+# 4. Check port availability
+log_section \\"4. Port Availability\\"
+PORTS=(80 8000 8001 8002 6379)
+for port in \\"\${PORTS[@]}\\"; do
+    if netstat -tuln 2>/dev/null | grep -q \\":\\$port \\" || ss -tuln 2>/dev/null | grep -q \\":\\$port \\"; then
+        log_warning \\"Port \\$port is IN USE\\"
+        PROCESS=\\$(lsof -ti:\\$port 2>/dev/null || ss -lptn sport = :\\$port 2>/dev/null | grep -v State)
+        if [ ! -z \\"\\$PROCESS\\" ]; then
+            log_info \\"   Process: \\$PROCESS\\"
+        fi
+    else
+        log_success \\"Port \\$port is available\\"
+    fi
+done
+
+# 5. Check running processes
+log_section \\"5. Running QTL Viewer Processes\\"
+QTL_PROCESSES=\\$(ps aux | grep -E '(qtl2rest|qtl2web|redis|ensimpl|singularity)' | grep -v grep)
+if [ ! -z \\"\\$QTL_PROCESSES\\" ]; then
+    log_info \\"Found running processes:\\"
+    echo \\"\\$QTL_PROCESSES\\" | tee -a \\$LOG_FILE
+else
+    log_warning \\"No QTL Viewer processes currently running\\"
+fi
+
+# 6. Test API endpoints (if services are running)
+log_section \\"6. API Endpoint Tests\\"
+if curl -s http://localhost:8001/health &> /dev/null || curl -s http://localhost:8001/ &> /dev/null; then
+    log_success \\"QTL2REST API is responding\\"
+
+    # Test datasets endpoint
+    log_info \\"Testing /datasets endpoint...\\"
+    DATASETS=\\$(curl -s http://localhost:8001/datasets 2>&1)
+    if echo \\"\\$DATASETS\\" | grep -q \\"${prefix}\\"; then
+        log_success \\"Dataset \\$STUDY_PREFIX found in API\\"
+    else
+        log_warning \\"Dataset might not be loaded yet\\"
+        echo \\"\\$DATASETS\\" | head -5 | tee -a \\$LOG_FILE
+    fi
+else
+    log_warning \\"QTL2REST API not responding (service may not be running)\\"
+fi
+
+if curl -s http://localhost:80 &> /dev/null || curl -s http://localhost:8000 &> /dev/null; then
+    log_success \\"QTL2WEB is responding\\"
+else
+    log_warning \\"QTL2WEB not responding (service may not be running)\\"
+fi
+
+# 7. Check system resources
+log_section \\"7. System Resources\\"
+log_info \\"Memory usage:\\"
+free -h | tee -a \\$LOG_FILE
+
+log_info \\"Disk space:\\"
+df -h . | tee -a \\$LOG_FILE
+
+# 8. Collect recent logs if available
+log_section \\"8. Recent Error Logs\\"
+if [ -d \\"logs\\" ]; then
+    log_info \\"Found logs directory\\"
+    find logs -name '*.log' -mtime -1 -exec echo \\"{}:\\" \\\\; -exec tail -20 {} \\\\; | tee -a \\$LOG_FILE
+else
+    log_info \\"No logs directory found\\"
+fi
+
+# 9. Configuration check
+log_section \\"9. Configuration Files\\"
+if [ -f \\"project.viewer.settings\\" ]; then
+    log_success \\"Found project.viewer.settings\\"
+    cat project.viewer.settings | tee -a \\$LOG_FILE
+else
+    log_error \\"project.viewer.settings not found\\"
+fi
+
+# 10. Provide recommendations
+log_section \\"10. Troubleshooting Recommendations\\"
+
+if [ ! -f \\"qtl2rest_0.6.5.sif\\" ]; then
+    log_error \\"Container images missing - pull them first:\\"
+    echo \\"   singularity pull docker://churchilllab/qtl2rest:0.6.5\\" | tee -a \\$LOG_FILE
+    echo \\"   singularity pull docker://churchilllab/qtl2web:1.6.1\\" | tee -a \\$LOG_FILE
+    echo \\"   singularity pull docker://redis:7-alpine\\" | tee -a \\$LOG_FILE
+fi
+
+if netstat -tuln 2>/dev/null | grep -q ':8001 ' || ss -tuln 2>/dev/null | grep -q ':8001 '; then
+    if ! curl -s http://localhost:8001/health &> /dev/null; then
+        log_warning \\"Port 8001 is in use but API not responding\\"
+        log_info \\"Check process using: lsof -i:8001 or ss -lptn sport = :8001\\"
+        log_info \\"Kill stuck process if needed: kill \\$(lsof -ti:8001)\\"
+    fi
+fi
+
+if [ ! -f \\"data/rdata/\\${STUDY_PREFIX}.RData\\" ]; then
+    log_error \\"RData file missing - ensure Module 9 completed successfully\\"
+fi
+
+# Summary
+log_section \\"Diagnostic Summary\\"
+echo \\"Full diagnostic log saved to: \\$LOG_FILE\\" | tee -a \\$LOG_FILE
+echo \\"\\" | tee -a \\$LOG_FILE
+echo \\"Next steps:\\" | tee -a \\$LOG_FILE
+echo \\"1. Review the log file for errors\\" | tee -a \\$LOG_FILE
+echo \\"2. Start services in screen/tmux sessions\\" | tee -a \\$LOG_FILE
+echo \\"3. Check logs in each session for errors\\" | tee -a \\$LOG_FILE
+echo \\"4. Use SSH tunnel to access from local machine\\" | tee -a \\$LOG_FILE
+echo \\"\\" | tee -a \\$LOG_FILE
+echo \\"For help, share this log file: \\$LOG_FILE\\" | tee -a \\$LOG_FILE
+"
+
+    writeLines(debug_script, "debug_qtlviewer.sh")
+    Sys.chmod("debug_qtlviewer.sh", mode = "0755")
+
     # Create README
     readme_content <- "# QTL Viewer for ${prefix}
 
 ## Overview
-This directory contains a complete QTL Viewer deployment following the official Churchill Lab documentation.
+This directory contains a complete QTL Viewer deployment following the official Churchill Lab documentation. Supports both **HPC deployment (Singularity)** and **local deployment (Docker)**.
 
 ## Directory Structure
 - **data/** - Contains RData files and SQLite database
@@ -777,16 +992,86 @@ This directory contains a complete QTL Viewer deployment following the official 
 - **cache/** - Cache directory for QTL Viewer (writable)
 - **.env** - Environment variables for Docker Compose
 - **project.viewer.settings** - QTL Viewer web interface settings (includes species info)
-- **docker-compose.yml** - Docker orchestration file
-- **start_qtlviewer.sh** - Convenience startup script
+- **docker-compose.yml** - Docker orchestration file (for local deployment)
+- **start_qtlviewer.sh** - Convenience startup script (for local deployment)
+- **debug_qtlviewer.sh** - Comprehensive debugging tool for troubleshooting
 
-## Quick Start
+## Deployment Options
 
-### Prerequisites
+### Option 1: HPC Deployment (Singularity) - RECOMMENDED FOR LARGE DATA
+
+For HPC deployment with Singularity (recommended when RData > 8GB):
+
+1. **Load Singularity on your HPC**:
+   ```bash
+   module load singularity
+   ```
+
+2. **Pull QTL Viewer images**:
+   ```bash
+   singularity pull docker://churchilllab/qtl2rest:0.6.5
+   singularity pull docker://churchilllab/qtl2web:1.6.1
+   singularity pull docker://redis:7-alpine
+   singularity pull docker://churchilllab/ensimpl:latest
+   ```
+
+3. **Start QTL2REST API (in screen/tmux session)**:
+   ```bash
+   singularity run \\
+     --bind \$PWD/data/rdata:/app/qtl2rest/data/rdata \\
+     --bind \$PWD/data/sqlite:/app/qtl2rest/data/sqlite \\
+     --env R_MAX_VSIZE=32Gb \\
+     qtl2rest_0.6.5.sif \\
+     uvicorn qtl2rest.main:app --host 0.0.0.0 --port 8001
+   ```
+
+4. **Start Redis (separate session)**:
+   ```bash
+   singularity run redis_7-alpine.sif
+   ```
+
+5. **Start QTL2WEB (separate session)**:
+   ```bash
+   singularity run \\
+     --bind \$PWD/project.viewer.settings:/app/qtlweb/viewer.settings \\
+     --bind \$PWD/cache:/app/cache \\
+     --env QTL2REST_URL=http://localhost:8001 \\
+     qtl2web_1.6.1.sif
+   ```
+
+6. **SSH tunnel from your local machine**:
+   ```bash
+   ssh -L 8000:localhost:80 -L 8001:localhost:8001 user@hpc-server
+   ```
+
+7. **Access in your browser**: http://localhost:8000
+
+**Troubleshooting HPC Deployment:**
+If services don't start properly, run the debug script:
+```bash
+./debug_qtlviewer.sh
+```
+
+This will generate a comprehensive diagnostic report including:
+- Singularity availability
+- Container image status
+- Port conflicts
+- Running processes
+- API endpoint tests
+- RData file validation
+- System resources
+- Configuration checks
+- Actionable recommendations
+
+### Option 2: Local Deployment (Docker)
+
+For local deployment with Docker Desktop (works if RData < 8GB):
+
+#### Prerequisites
 - Docker Desktop installed and running
 - This entire directory downloaded to your local machine
 
-### Steps
+#### Steps
 1. **Download this directory** to your local machine
 2. **Edit the .env file** if needed (ports, paths)
 3. **Run the startup script**:
@@ -843,22 +1128,76 @@ docker-compose restart
 
 ## Troubleshooting
 
-### Port Conflicts
+### HPC-Specific Issues
+
+#### Large RData Files (>8GB)
+- **Use HPC Singularity deployment** instead of local Docker
+- Increase R memory limit: `--env R_MAX_VSIZE=64Gb` (adjust as needed)
+- Monitor memory usage with `top` or `htop` during startup
+
+#### Singularity Not Available
+```bash
+# Check if Singularity is installed
+which singularity
+
+# Load Singularity module (HPC-specific)
+module avail singularity
+module load singularity/3.8.0  # or latest version
+```
+
+#### SSH Tunnel Issues
+If tunnel disconnects:
+```bash
+# Use autossh for persistent tunnels
+autossh -M 0 -L 8000:localhost:80 -L 8001:localhost:8001 user@hpc-server
+
+# Or use screen/tmux to keep tunnel alive
+screen -S qtl_tunnel
+ssh -L 8000:localhost:80 -L 8001:localhost:8001 user@hpc-server
+# Ctrl+A+D to detach
+```
+
+### Common Debugging Steps
+
+**Always start with the debug script:**
+```bash
+./debug_qtlviewer.sh
+```
+
+The script will:
+- Check all prerequisites
+- Verify data files
+- Test ports
+- Check running services
+- Provide specific recommendations
+- Generate a timestamped log file
+
+**Share the generated log file when asking for help!**
+
+### Local Docker Issues
+
+#### Port Conflicts
 If port 8000 is already in use, edit .env and change HOST_PORT_WEB to another port (e.g., 8080).
 
-### Permissions
+#### Docker Memory Limit
+Docker Desktop has an 8GB default memory limit. For larger datasets:
+1. Open Docker Desktop → Settings → Resources
+2. Increase Memory allocation
+3. OR use HPC Singularity deployment instead
+
+#### Permissions
 Ensure the cache/ directory has write permissions:
 ```bash
 chmod -R 777 cache/
 ```
 
-### Docker Issues
+#### Docker Not Running
 Make sure Docker Desktop is running:
 ```bash
 docker info
 ```
 
-### View Container Logs
+#### View Container Logs
 ```bash
 docker-compose logs qtl2rest
 docker-compose logs qtl2web
@@ -877,8 +1216,21 @@ docker-compose logs redis
 - QTL2 API: https://github.com/churchill-lab/qtl2rest
 - Churchill Lab: https://churchilllab.jax.org/
 
+## Performance Notes
+
+- **HPC Deployment**: Recommended for RData files > 8GB
+  - Can handle datasets up to 100GB+ with sufficient memory allocation
+  - Uses Singularity containers natively supported on HPC systems
+  - Better for production deployments with many users
+
+- **Local Docker Deployment**: Best for RData files < 8GB
+  - Limited by Docker Desktop memory allocation (default 8GB)
+  - Good for quick exploration and small datasets
+  - Easier setup for single-user access
+
 ## Generated by QTL2_NF Pipeline
 Study Prefix: ${prefix}
+Deployment: Supports both HPC (Singularity) and Local (Docker)
 "
 
     writeLines(readme_content, "README_qtlviewer.md")
@@ -910,6 +1262,7 @@ Study Prefix: ${prefix}
         c("project.viewer.settings", "project.viewer.settings"),
         c("docker-compose.yml", "docker-compose.yml"),
         c("start_qtlviewer.sh", "start_qtlviewer.sh"),
+        c("debug_qtlviewer.sh", "debug_qtlviewer.sh"),
         c("README_qtlviewer.md", "README_qtlviewer.md")
     )
 
@@ -931,8 +1284,9 @@ Study Prefix: ${prefix}
         }
     }
 
-    # Set executable permission on startup script
+    # Set executable permissions on scripts
     Sys.chmod(file.path(outdir, "start_qtlviewer.sh"), mode = "0755")
+    Sys.chmod(file.path(outdir, "debug_qtlviewer.sh"), mode = "0755")
 
     if (copy_success) {
         cat("\\n✅ All files successfully copied to", outdir, "\\n")
@@ -946,13 +1300,22 @@ Study Prefix: ${prefix}
     cat("QTL Viewer Deployment Package Complete\\n")
     cat("=================================================================\\n")
     cat("Location:", outdir, "\\n")
-    cat("\\nNew files generated (following official documentation):\\n")
+    cat("\\nDeployment files generated:\\n")
     cat("  ✓ .env (environment configuration)\\n")
     cat("  ✓ project.viewer.settings (species, build info)\\n")
-    cat("  ✓ docker-compose.yml (updated structure)\\n")
+    cat("  ✓ docker-compose.yml (Docker orchestration)\\n")
+    cat("  ✓ start_qtlviewer.sh (startup script)\\n")
+    cat("  ✓ debug_qtlviewer.sh (diagnostic tool - USE THIS FOR TROUBLESHOOTING!)\\n")
     cat("  ✓ cache/ (writable cache directory)\\n")
-    cat("\\nThe 'species' field is now properly configured in:\\n")
-    cat("  → project.viewer.settings (JSON format)\\n")
+    cat("\\nFor HPC deployment with Singularity:\\n")
+    cat("  → See README_qtlviewer.md for detailed instructions\\n")
+    cat("  → Run ./debug_qtlviewer.sh for comprehensive diagnostics\\n")
+    cat("\\nThe debug script will help troubleshoot:\\n")
+    cat("  - Container availability\\n")
+    cat("  - Port conflicts\\n")
+    cat("  - Service startup issues\\n")
+    cat("  - API connectivity\\n")
+    cat("  - RData loading problems\\n")
     cat("=================================================================\\n")
     """
 }
