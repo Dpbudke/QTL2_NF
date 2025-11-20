@@ -57,6 +57,7 @@ def helpMessage() {
                             permutation     - Start from permutation testing
                             significant_qtls - Start from QTL identification
                             qtlviewer       - Start from QTL Viewer setup
+                            visualize       - Start from QTL visualization
 
     Other Arguments:
         --finalreport_files  Path to GeneSeek FinalReport file(s)
@@ -93,7 +94,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer']
+                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer', 'visualize']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -136,6 +137,7 @@ include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf
 include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
+include { VISUALIZE_QTLS } from './modules/10_visualize.nf'
 
 /*
 ========================================================================================
@@ -158,7 +160,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer']
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer', 'visualize']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -565,6 +567,26 @@ workflow {
             PREPARE_QTLVIEWER_DATA.out.instructions.view { "QTL Viewer instructions: $it" }
         } else {
             log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (supports HPC and local deployment)"
+        }
+
+        // MODULE 10: QTL Visualizations (Optional - generates plot_coefCC plots)
+        // NOTE: This module generates individual PNG plots for significant QTLs
+        // Use --run_visualize to enable or resume from visualize step
+        if (params.run_visualize || shouldRunStep('visualize', params.resume_from)) {
+            log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
+
+            VISUALIZE_QTLS(
+                ch_alleleprob,
+                ch_genetic_map,
+                ch_scan_results,
+                ch_filtered_cross2,
+                ch_significant_qtls,
+                ch_study_prefix
+            )
+
+            VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
+        } else {
+            log.info "Skipping QTL visualization - use --run_visualize to enable"
         }
 
     } else {

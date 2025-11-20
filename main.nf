@@ -33,6 +33,7 @@ def helpMessage() {
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
         --run_qtlviewer     Enable QTL Viewer setup (Module 9 - supports HPC and local deployment) [default: false]
+        --run_visualize     Enable QTL visualization plots (Module 10 - plot_coefCC for 99% significant QTLs) [default: false]
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
@@ -44,6 +45,7 @@ def helpMessage() {
         Module 7: Chunked permutation testing (DO_Pipe approach - 1000 permutations)
         Module 8: Significant QTL identification
         Module 9: QTL Viewer setup (OPTIONAL - use --run_qtlviewer, supports HPC and local deployment)
+        Module 10: QTL visualizations (OPTIONAL - use --run_visualize, generates plot_coefCC plots for 99% QTLs)
     
     Example:
         nextflow run main.nf \\
@@ -108,6 +110,7 @@ include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf
 include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
+include { VISUALIZE_QTLS } from './modules/10_visualize.nf'
 // include { SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'  // Process doesn't exist in module
 
 /*
@@ -317,6 +320,27 @@ workflow {
             // SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
         } else {
             log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (supports HPC and local deployment)"
+        }
+
+        // MODULE 10: QTL Visualizations (Optional - generates plot_coefCC plots)
+        // NOTE: This module generates individual PNG plots for significant QTLs
+        // This module is skipped by default. Use --run_visualize to enable
+        if (params.run_visualize) {
+            log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
+
+            VISUALIZE_QTLS(
+                PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
+                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+                COMBINE_BATCH_RESULTS.out.scan_results,
+                CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
+                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                ch_study_prefix
+            )
+
+            // Display results for Module 10
+            VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
+        } else {
+            log.info "Skipping QTL visualization - use --run_visualize to enable"
         }
 
         // Display results for Modules 5-8
