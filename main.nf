@@ -32,8 +32,6 @@ def helpMessage() {
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
-        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - supports HPC and local deployment) [default: false]
-        --run_visualize     Enable QTL visualization plots (Module 10 - plot_coefCC for 99% significant QTLs) [default: false]
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
@@ -44,8 +42,7 @@ def helpMessage() {
         Module 6: HPC array-based genome scanning
         Module 7: Chunked permutation testing (DO_Pipe approach - 1000 permutations)
         Module 8: Significant QTL identification
-        Module 9: QTL Viewer setup (OPTIONAL - use --run_qtlviewer, supports HPC and local deployment)
-        Module 10: QTL visualizations (OPTIONAL - use --run_visualize, generates plot_coefCC plots for 99% QTLs)
+        Module 9: QTL visualizations (generates plot_coefCC plots for 99% QTLs)
     
     Example:
         nextflow run main.nf \\
@@ -109,9 +106,7 @@ include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
-include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
-include { VISUALIZE_QTLS } from './modules/10_visualize.nf'
-// include { SETUP_QTLVIEWER_DEPLOYMENT } from './modules/09_qtl_viewer.nf'  // Process doesn't exist in module
+include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 
 /*
 ========================================================================================
@@ -202,13 +197,11 @@ workflow {
 
         GENOME_SCAN_SETUP.out.summary.view { "Chunking summary: $it" }
 
-        // Create batch IDs from batch file
-        GENOME_SCAN_SETUP.out.batch_file
+        // Use batch_ids from GENOME_SCAN_SETUP stdout
+        GENOME_SCAN_SETUP.out.batch_ids
             .splitText()
             .map { it.trim() }
-            .filter { !it.startsWith('batch_id') }
-            .map { it.split('\t')[0] }
-            .unique()
+            .filter { it != "" }
             .set { ch_batch_ids }
 
         // Process batches in parallel
@@ -291,57 +284,21 @@ workflow {
             ch_study_prefix
         )
 
-        // MODULE 9: QTL Viewer Integration (Optional - supports HPC and local deployment)
-        // NOTE: Module 9 can be deployed on HPC or locally via Docker/Singularity
-        // This module is skipped by default. Use --run_qtlviewer to enable
-        if (params.run_qtlviewer) {
-            log.info "Running QTL Viewer setup (supports HPC and local deployment)"
-
-            PREPARE_QTLVIEWER_DATA(
-                PREPARE_GENOME_SCAN_SETUP.out.genoprob,  // Changed from alleleprob
-                PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
-                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
-                CREATE_CROSS2_OBJECT.out.cross2_object,  // Added for pmap extraction
-                COMBINE_BATCH_RESULTS.out.scan_results,
-                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-                ch_gtf_file,
-                ch_study_prefix
-            )
-
-            // SETUP_QTLVIEWER_DEPLOYMENT(
-            //     PREPARE_QTLVIEWER_DATA.out.qtlviewer_data,
-            //     ch_study_prefix
-            // )
-
-            // Display results for Module 9
-            PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-            // SETUP_QTLVIEWER_DEPLOYMENT.out.docker_compose.view { "Docker Compose config created: $it" }
-            // SETUP_QTLVIEWER_DEPLOYMENT.out.startup_script.view { "QTL Viewer startup script: $it" }
-            // SETUP_QTLVIEWER_DEPLOYMENT.out.instructions.view { "QTL Viewer instructions: $it" }
-        } else {
-            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (supports HPC and local deployment)"
-        }
-
-        // MODULE 10: QTL Visualizations (Optional - generates plot_coefCC plots)
+        // MODULE 9: QTL Visualizations
         // NOTE: This module generates individual PNG plots for significant QTLs
-        // This module is skipped by default. Use --run_visualize to enable
-        if (params.run_visualize) {
-            log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
+        log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
 
-            VISUALIZE_QTLS(
-                PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
-                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
-                COMBINE_BATCH_RESULTS.out.scan_results,
-                CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
-                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-                ch_study_prefix
-            )
+        VISUALIZE_QTLS(
+            PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
+            PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+            COMBINE_BATCH_RESULTS.out.scan_results,
+            CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
+            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            ch_study_prefix
+        )
 
-            // Display results for Module 10
-            VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
-        } else {
-            log.info "Skipping QTL visualization - use --run_visualize to enable"
-        }
+        // Display results for Module 9
+        VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
 
         // Display results for Modules 5-8
         PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }

@@ -247,30 +247,31 @@ The module processes specially formatted CSV files with the following convention
 
 **Resources**: 8 CPUs, 128GB RAM, 4 hours
 
-### Module 9: QTL Viewer Data Preparation (`09_qtl_viewer.nf`)
-**Purpose**: Automated conversion to QTL Viewer RData format with complete Docker deployment package for local visualization
+### Module 9: QTL Visualizations (`09_visualize.nf`)
+**Purpose**: Generate publication-quality QTL coefficient plots for highly significant QTLs
 
 **Key Functions**:
-- **Intelligent Cross2 Detection**: Auto-detects and prioritizes regionally-filtered cross2 (Module 7) over full cross2 (Module 4)
-- **QTL Viewer Format Conversion**: Transforms r/qtl2 objects into official QTL Viewer RData structure
-- **Required Elements Assembly**: Creates ensembl.version, genoprobs, K (kinship), map, markers, and dataset.phenotypes objects
-- **Optimized Allele Probabilities**: Uses alleleprob (2.1GB) instead of genoprob (9.3GB) for 4.4x size reduction while maintaining all necessary information for visualization
-- **Phenotype Annotations**: Generates complete phenotype metadata with data types and categories
-- **Sample Annotations**: Integrates covariate information and sample identifiers
-- **Covariate Matrix**: Prepares model matrix for interactive QTL Viewer covariate selection
-- **LOD Peaks Integration**: Incorporates significant QTLs from Module 8 for interactive exploration
-- **Docker Deployment Package**: Creates docker-compose.yml, startup script, README, and data directory structure
-- **MGI Database Integration**: Automatically sources SQLite database for founder SNP annotation (tries local cache, then Figshare download)
-- **Portable Deployment**: Complete self-contained package downloadable to local machine for visualization
+- **High-Confidence QTL Focus**: Visualizes only 99% significant QTLs from Module 8 for maximum stringency
+- **Founder Allele Effect Plots**: Uses plot_coefCC() to display founder strain allele effects with LOD scores
+- **Coefficient Calculation**: Computes scan1coef() founder allele effects using alleleprobs
+- **Chromosome Organization**: Automatically organizes plots into chromosome-specific subdirectories (chr1/ through chr19/ and chrX/)
+- **Batch Processing**: Efficiently processes thousands of QTLs with progress monitoring
+- **Publication Quality**: 800x600 pixel PNG format with optimized margins and gray95 background
+- **Comprehensive Naming**: Each plot filename includes gene ID, chromosome, position (cM), and LOD score for easy identification
+- **Validation Reporting**: Detailed summary of plots generated per chromosome with success/failure tracking
 
-**Deployment Features**:
-- **One-Command Startup**: `./start_qtlviewer.sh` launches both qtl2rest (API) and qtl2web (interface)
-- **Dual-Container Architecture**: qtl2rest (port 8001) + qtl2web (port 8000) with bridge networking
-- **Interactive Web Interface**: http://localhost:8000 for LOD plots, effect plots, and SNP associations
-- **REST API Access**: http://localhost:8001 for programmatic data queries
-- **Cross-Platform**: Works on any system with Docker Desktop (Windows, Mac, Linux)
+**Output Organization**:
+- **chr{1-19,X}/ subdirectories**: Plots organized by chromosome for easy navigation
+- **Filename format**: `{gene_id}_chr{chr}_{pos}cM_LOD{lod}.png`
+- **Example**: `ENSMUSG00000012345_chr12_85.3cM_LOD12.45.png`
 
-**Resources**: PREPARE_QTLVIEWER_DATA (16 CPUs, 256GB, 6h), SETUP_QTLVIEWER_DEPLOYMENT (2 CPUs, 16GB, 1h)
+**Use Cases**:
+- **Publication Figures**: High-quality visualizations for manuscripts and presentations
+- **Allele Effect Interpretation**: Visual assessment of founder strain contributions to trait variation
+- **QTL Validation**: Quick visual confirmation of strong, biologically meaningful QTL signals
+- **Follow-up Prioritization**: Identify QTLs with interesting allele effect patterns for further investigation
+
+**Resources**: 4 CPUs, 32GB RAM, 8 hours
 
 ### Optional: Broman Mixup QC (`broman_mixup_qc.nf`)
 **Purpose**: Detect sample mix-ups by comparing observed expression patterns with genotype-predicted expression using eQTL signatures
@@ -559,22 +560,10 @@ nextflow run main_resume.nf \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
-# Resume from QTL Viewer setup only (visualization-only run)
-# Note: Module 9 should be run in background for long processing times
-nohup nextflow run main_resume.nf \
-  --resume_from qtlviewer \
-  --study_prefix DOchln > nextflow_run.log 2>&1 &
-```
-
-**Background Execution for Long-Running Modules**:
-For Module 9 and other pipeline executions exceeding 2 minutes, use background execution to avoid timeout issues:
-```bash
-nohup nextflow run main_resume.nf \
-  --resume_from qtlviewer \
-  --study_prefix DOchln > nextflow_run.log 2>&1 &
-
-# Monitor progress
-tail -f nextflow_run.log
+# Resume from QTL visualization only
+nextflow run main_resume.nf \
+  --resume_from visualize \
+  --study_prefix DOchln
 ```
 
 **Resume Options (Module Numbers)**:
@@ -586,7 +575,7 @@ tail -f nextflow_run.log
 -  `qtl_analysis` - Start from HPC array genome scanning and peak detection
 -  `permutation` - Start from permutation testing and significance thresholds
 -  `significant_qtls` - Start from significant QTL identification and summarization
--  `qtlviewer` - Start from QTL Viewer data preparation and deployment
+-  `visualize` - Start from QTL visualization (plot_coefCC for 99% significant QTLs)
 
 **Perfect Module Alignment**: Resume capability matches the numbered module structure exactly, enabling intuitive restart from any processing step with full compatibility.
 
@@ -702,67 +691,21 @@ results/
 │   ├── {prefix}_qtl_summary.txt     # Summary statistics and distributions
 │   ├── {prefix}_high_priority_qtls.csv  # Exceptional QTLs (LOD ≥ 10)
 │   └── qtl_identification_report.txt
-├── 09_qtl_viewer_data/              # QTL Viewer deployment package
-│   ├── {prefix}_qtlviewer.RData    # QTL Viewer compatible RData file
-│   ├── qtlviewer_conversion_report.txt  # Data conversion validation report
-│   ├── docker-compose.yml          # Docker container orchestration
-│   ├── start_qtlviewer.sh          # One-command deployment script (executable)
-│   ├── README_qtlviewer.md         # Comprehensive deployment instructions
-│   └── data/                       # QTL Viewer data directory
-│       ├── rdata/                  # RData files for QTL Viewer
-│       │   └── {prefix}.RData      # Study-specific QTL data
-│       └── sqlite/                 # SQLite databases
-│           └── ccfoundersnps.sqlite  # MGI mouse gene annotations and founder SNPs
+├── 09_visualize/                    # QTL visualization plots
+│   ├── chr1/                        # Chromosome 1 QTL plots
+│   │   └── {gene_id}_chr1_{pos}cM_LOD{lod}.png
+│   ├── chr2/                        # Chromosome 2 QTL plots
+│   │   └── {gene_id}_chr2_{pos}cM_LOD{lod}.png
+│   ├── ...                          # Additional chromosomes
+│   ├── chrX/                        # Chromosome X QTL plots
+│   │   └── {gene_id}_chrX_{pos}cM_LOD{lod}.png
+│   └── visualization_report.txt     # Plot generation summary
 └── pipeline_info/                   # Execution monitoring and reporting
     ├── execution_timeline.html      # Interactive execution timeline
     ├── execution_report.html        # Comprehensive resource usage report
     ├── execution_trace.txt          # Detailed process execution trace
     └── pipeline_dag.svg             # Visual workflow representation
 ```
-
-### QTL Viewer Deployment
-
-Module 9 creates a **fully portable QTL Viewer deployment package** with auto-detection of filtered vs. full cross2 objects:
-
-```bash
-# Enable QTL Viewer during pipeline run (optional - designed for local deployment)
-nextflow run main.nf \
-  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
-  --finalreport_files 'Data/FinalReport*.txt' \
-  --study_prefix DOchln \
-  --run_qtlviewer \
-  -profile standard
-
-# Download entire deployment directory to local machine
-scp -r user@hpc:path/to/results/09_qtl_viewer_data/ ~/my_qtl_study/
-cd ~/my_qtl_study/09_qtl_viewer_data/
-
-# One-command local deployment
-./start_qtlviewer.sh
-
-# Alternative: Direct Docker Compose deployment
-docker-compose up -d
-```
-
-**Intelligent Cross2 Detection**:
-- **Prioritizes filtered cross2**: Uses `{prefix}_filtered_cross2.rds` from Module 7 if regional filtering was applied
-- **Falls back to full cross2**: Uses `{prefix}_cross2.rds` from Module 4 if no filtering was performed
-- **Automatic selection**: No manual configuration required - pipeline detects and uses appropriate dataset
-
-**QTL Viewer Features**:
-- **Interactive LOD Score Visualization**: Chromosome-wide LOD plots with zoom and pan capabilities
-- **Founder Strain Effect Plots**: Visualize allelic effects for each DO founder strain
-- **High-Resolution SNP Association**: Fine-mapping with MGI founder SNP database integration
-- **Phenotype Browser**: Search and filter phenotypes with interactive data tables
-- **Covariate Selection**: Dynamic covariate adjustment through web interface
-- **REST API Access**: Programmatic data queries at http://localhost:8001
-
-**Deployment Package Contents**:
-- **{prefix}_qtlviewer.RData**: Complete QTL Viewer data bundle with genoprobs, kinship, markers, and results
-- **docker-compose.yml**: Pre-configured dual-container setup (qtl2rest + qtl2web)
-- **start_qtlviewer.sh**: Automated startup script with health checks and status reporting
-- **README_qtlviewer.md**: Comprehensive local deployment instructions
-- **data/ directory**: Organized RData and SQLite database files for QTL Viewer containers
 
 ## Configuration
 
@@ -827,7 +770,6 @@ apptainer {
 
 **Quality Control Parameters**:
 - `--run_mixup_qc`: Enable standalone sample mixup detection (default: false)
-- `--run_qtlviewer`: Enable QTL Viewer data preparation and deployment package creation (default: false)
 
 **Example Parameter Sets**:
 ```bash

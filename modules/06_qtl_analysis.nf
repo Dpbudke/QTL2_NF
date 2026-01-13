@@ -15,6 +15,7 @@ process GENOME_SCAN_SETUP {
     path("${prefix}_pheno_chunks.txt"), emit: chunk_file
     path("${prefix}_batch_assignments.txt"), emit: batch_file
     path("${prefix}_chunk_summary.txt"), emit: summary
+    stdout emit: batch_ids
 
     script:
     """
@@ -60,6 +61,10 @@ process GENOME_SCAN_SETUP {
         paste("LOD threshold for filtering:", ${lod_threshold})
     )
     writeLines(summary_text, "${prefix}_chunk_summary.txt")
+
+    # Output batch IDs to stdout for nextflow channel
+    cat(paste(1:n_batches, collapse="\\n"))
+    cat("\\n")
     """
 }
 

@@ -1,6 +1,6 @@
 process VISUALIZE_QTLS {
     tag "Generating QTL visualizations for ${prefix}"
-    publishDir "${params.outdir}/10_visualize", mode: 'copy'
+    publishDir "${params.outdir}/09_visualize", mode: 'copy'
 
     cpus 4
     memory '32 GB'

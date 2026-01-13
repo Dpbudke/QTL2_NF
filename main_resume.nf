@@ -22,11 +22,8 @@ params.sample_filter = null
 params.help = false
 
 // Resume parameters
-params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, qtlviewer
+params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, visualize
 params.input_dir = null    // Directory to load cached results from (defaults to outdir if not specified)
-
-// QTL Viewer parameters (Module 9 - optional, supports HPC and local deployment)
-params.run_qtlviewer = false  // Set to true to run QTL Viewer setup (supports HPC and local deployment)
 
 // Print help message
 def helpMessage() {
@@ -56,7 +53,6 @@ def helpMessage() {
                             regional_filter - Start from regional QTL filtering (requires --qtl_region)
                             permutation     - Start from permutation testing
                             significant_qtls - Start from QTL identification
-                            qtlviewer       - Start from QTL Viewer setup
                             visualize       - Start from QTL visualization
 
     Other Arguments:
@@ -65,7 +61,6 @@ def helpMessage() {
         --input_dir         Directory to load cached results from (defaults to outdir if not specified)
         --lod_threshold     LOD threshold for filtering [default: 7.0]
         --sample_filter     JSON filter for sample subsetting
-        --run_qtlviewer     Enable QTL Viewer setup (Module 9 - supports HPC and local deployment) [default: false]
 
     Examples:
         # Full pipeline
@@ -94,7 +89,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer', 'visualize']
+                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -136,8 +131,7 @@ include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
-include { PREPARE_QTLVIEWER_DATA } from './modules/09_qtl_viewer.nf'
-include { VISUALIZE_QTLS } from './modules/10_visualize.nf'
+include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 
 /*
 ========================================================================================
@@ -160,7 +154,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'qtlviewer', 'visualize']
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -173,7 +167,7 @@ def shouldLoadFromFiles(currentStep, resumeFrom) {
     if (!resumeFrom) return false
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'permutation', 'significant_qtls', 'qtlviewer']
+                    'genome_scan', 'permutation', 'significant_qtls', 'visualize']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -545,34 +539,9 @@ workflow {
             ch_significant_qtls = Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs"))
         }
 
-        // MODULE 9: QTL Viewer Integration (Optional - supports HPC and local deployment)
-        // NOTE: Module 9 can be deployed on HPC or locally via Docker/Singularity
-        // Use --run_qtlviewer to enable this module
-        if (params.run_qtlviewer || shouldRunStep('qtlviewer', params.resume_from)) {
-            log.info "Running QTL Viewer setup (supports HPC and local deployment)"
-            log.info "Using genoprobs (not alleleprobs) for QTL Viewer compatibility"
-
-            PREPARE_QTLVIEWER_DATA(
-                ch_genoprob,         // Changed from ch_alleleprob
-                ch_kinship_loco,
-                ch_genetic_map,
-                ch_cross2_object,    // Added for pmap extraction
-                ch_scan_results,
-                ch_significant_qtls,
-                Channel.fromPath(params.gtf_file, checkIfExists: true),
-                ch_study_prefix
-            )
-
-            PREPARE_QTLVIEWER_DATA.out.validation_report.view { "QTL Viewer conversion report: $it" }
-            PREPARE_QTLVIEWER_DATA.out.instructions.view { "QTL Viewer instructions: $it" }
-        } else {
-            log.info "Skipping QTL Viewer setup - use --run_qtlviewer to enable (supports HPC and local deployment)"
-        }
-
-        // MODULE 10: QTL Visualizations (Optional - generates plot_coefCC plots)
+        // MODULE 9: QTL Visualizations
         // NOTE: This module generates individual PNG plots for significant QTLs
-        // Use --run_visualize to enable or resume from visualize step
-        if (params.run_visualize || shouldRunStep('visualize', params.resume_from)) {
+        if (shouldRunStep('visualize', params.resume_from)) {
             log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
 
             VISUALIZE_QTLS(
@@ -586,7 +555,7 @@ workflow {
 
             VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
         } else {
-            log.info "Skipping QTL visualization - use --run_visualize to enable"
+            log.info "Skipping QTL visualization - will resume from this step if needed"
         }
 
     } else {
