@@ -237,7 +237,7 @@ process PERM_VALIDATE_BATCHES {
     path("${study_prefix}_batch_validation_report.txt"), emit: validation_report
     path("${study_prefix}_corrupt_batches.txt"), emit: corrupt_batches optional true
     path("${study_prefix}_missing_batches.txt"), emit: missing_batches optional true
-    env VALIDATION_STATUS, emit: status
+    path("VALIDATION_STATUS"), emit: status
 
     script:
     """
@@ -765,7 +765,7 @@ workflow CHUNKED_PERMUTATION_TESTING {
 
             // Step 5: Repair corrupt/missing batches if validation failed
             def needs_repair = PERM_VALIDATE_BATCHES.out.status
-                .map { status -> status == "FAILED" }
+                .map { status_file -> status_file.text.trim() == "FAILED" }
                 .first()
 
             // Create repair channel from missing and corrupt batch lists

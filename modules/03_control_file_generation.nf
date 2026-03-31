@@ -7,19 +7,18 @@ process GENERATE_CONTROL_FILE {
     path(covar_csv)
     path(geno_files)  // all chromosome geno files from Module 2
     path(allele_codes_file)  // GM_allelecodes.csv from Module 2
+    path(founder_geno_files)  // GM_foundergeno*.csv from Data
+    path(gmap_files)  // GM_gmap*.csv from Data
+    path(pmap_files)  // GM_pmap*.csv from Data
     val(prefix)
 
     output:
     path("${prefix}_control.json"), emit: control_file
-    path("GM_foundergeno*.csv"), emit: founder_genos
-    path("GM_gmap*.csv"), emit: genetic_maps
-    path("GM_pmap*.csv"), emit: physical_maps
     path("control_validation_report.txt"), emit: validation_report
 
     script:
     """
     #!/usr/bin/env Rscript
-
     # Load required libraries
     suppressPackageStartupMessages({
         library(qtl2)
@@ -32,50 +31,20 @@ process GENERATE_CONTROL_FILE {
     validation_log <- c(validation_log, paste("Study Prefix:", "${prefix}"))
     validation_log <- c(validation_log, "")
 
-    # Use already downloaded GM reference files from Module 2
-    cat("Using GigaMUGA reference files from Module 2...\\n")
-    figshare_url <- "https://figshare.com/ndownloader/files/40233652"
+    # Use local GM reference files from Data directory
+    cat("Using local GigaMUGA reference files from Data directory...\\n")
 
-    validation_log <- c(validation_log, "=== Reference Data Download ===")
-    validation_log <- c(validation_log, "Using GM reference files already downloaded in Module 2")
+    validation_log <- c(validation_log, "=== Reference Data ===")
+    validation_log <- c(validation_log, "Using local GM reference files from Data directory")
 
-    tryCatch({
-        # Download and extract (since we need founder/map files that Module 2 didn't extract)
-        download.file(figshare_url,
-                     destfile = "GM_processed_files_build39.zip",
-                     method = "auto",
-                     mode = "wb")
+    # Files are staged as inputs - find them in working directory
+    founder_files <- Sys.glob("GM_foundergeno*.csv")
+    gmap_file_list <- Sys.glob("GM_gmap*.csv")
+    pmap_file_list <- Sys.glob("GM_pmap*.csv")
 
-        # Extract the zip file
-        unzip("GM_processed_files_build39.zip", exdir = ".")
-        validation_log <- c(validation_log, "✓ Successfully extracted reference files")
-
-        # Find required files
-        founder_files <- list.files(pattern = ".*foundergeno.*\\\\.csv", recursive = TRUE, full.names = TRUE)
-        gmap_files <- list.files(pattern = ".*gmap.*\\\\.csv", recursive = TRUE, full.names = TRUE)
-        pmap_files <- list.files(pattern = ".*pmap.*\\\\.csv", recursive = TRUE, full.names = TRUE)
-
-        validation_log <- c(validation_log, paste("✓ Found", length(founder_files), "founder genotype files"))
-        validation_log <- c(validation_log, paste("✓ Found", length(gmap_files), "genetic map files"))
-        validation_log <- c(validation_log, paste("✓ Found", length(pmap_files), "physical map files"))
-
-        # Copy files to working directory for output
-        for(file in founder_files) {
-            file.copy(file, basename(file))
-        }
-        for(file in gmap_files) {
-            file.copy(file, basename(file))
-        }
-        for(file in pmap_files) {
-            file.copy(file, basename(file))
-        }
-
-        # Clean up zip file
-        file.remove("GM_processed_files_build39.zip")
-
-    }, error = function(e) {
-        stop("Failed to download/extract reference files: ", e\$message)
-    })
+    validation_log <- c(validation_log, paste("✓ Found", length(founder_files), "founder genotype files"))
+    validation_log <- c(validation_log, paste("✓ Found", length(gmap_file_list), "genetic map files"))
+    validation_log <- c(validation_log, paste("✓ Found", length(pmap_file_list), "physical map files"))
 
     # Validate input files exist
     if (!file.exists("${pheno_csv}")) {
@@ -90,8 +59,9 @@ process GENERATE_CONTROL_FILE {
     validation_log <- c(validation_log, "=== Control File Generation ===")
 
     # Get list of genotype files and extract chromosomes
-    geno_files <- list.files(pattern = "${prefix}_geno.*\\\\.csv", full.names = FALSE)
-    chromosomes <- gsub("${prefix}_geno(.*)\\\\.csv", "\\\\1", geno_files)
+    geno_files <- Sys.glob("${prefix}_geno*.csv")
+    geno_files <- basename(geno_files)
+    chromosomes <- sub("${prefix}_geno", "", sub("[.]csv", "", geno_files))
 
     # For DO mice, we need chromosomes 1-19 and X
     # Filter to only include standard chromosomes and X (exclude Y, M for DO analysis)
@@ -101,9 +71,9 @@ process GENERATE_CONTROL_FILE {
     validation_log <- c(validation_log, paste("✓ Valid chromosomes for DO analysis:", paste(valid_chromosomes, collapse = ", ")))
 
     # Check that we have corresponding reference files for each chromosome
-    available_founder <- gsub("GM_foundergeno(.*)\\\\.csv", "\\\\1", list.files(pattern = "GM_foundergeno.*\\\\.csv"))
-    available_gmap <- gsub("GM_gmap(.*)\\\\.csv", "\\\\1", list.files(pattern = "GM_gmap.*\\\\.csv"))
-    available_pmap <- gsub("GM_pmap(.*)\\\\.csv", "\\\\1", list.files(pattern = "GM_pmap.*\\\\.csv"))
+    available_founder <- sub("GM_foundergeno", "", sub("[.]csv", "", basename(Sys.glob("GM_foundergeno*.csv"))))
+    available_gmap <- sub("GM_gmap", "", sub("[.]csv", "", basename(Sys.glob("GM_gmap*.csv"))))
+    available_pmap <- sub("GM_pmap", "", sub("[.]csv", "", basename(Sys.glob("GM_pmap*.csv"))))
 
     # Keep only chromosomes where we have all required files
     final_chromosomes <- intersect(
@@ -168,9 +138,9 @@ process GENERATE_CONTROL_FILE {
     cat("Creating control file...\\n")
 
     control_args <- list(
-        output_file = paste0("${prefix}_control.json"),
+        output_file = "${prefix}_control.json",
         crosstype = "do",
-        description = paste0("${prefix} DO QTL analysis"),
+        description = "${prefix} DO QTL analysis",
         founder_geno_file = paste0("GM_foundergeno", final_chromosomes, ".csv"),
         founder_geno_transposed = TRUE,
         gmap_file = paste0("GM_gmap", final_chromosomes, ".csv"),
@@ -193,7 +163,7 @@ process GENERATE_CONTROL_FILE {
     # Write control file
     do.call(write_control_file, control_args)
 
-    validation_log <- c(validation_log, paste("✓ Successfully created", paste0("${prefix}_control.json")))
+    validation_log <- c(validation_log, paste("✓ Successfully created ${prefix}_control.json"))
     validation_log <- c(validation_log, paste("✓ Control file includes", length(final_chromosomes), "chromosomes"))
     validation_log <- c(validation_log, paste("✓ X chromosome handling:", ifelse("X" %in% final_chromosomes, "enabled", "not present")))
 

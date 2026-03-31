@@ -24,14 +24,22 @@ def helpMessage() {
     Required Arguments:
         --phenotype_file     Path to master phenotype CSV (from your pre-pipeline RMD)
         --study_prefix       Study identifier prefix for output files
-    
+
     Optional Arguments:
+        --analysis_type     Analysis preset that auto-configures outdir, sample_filter, exclude_covariates,
+                            and interactive_covar. Valid values:
+                              - Diet_additive    : Full cohort, additive model (default settings)
+                              - Diet_interactive : Full cohort, GxE interaction with Diet covariate
+                              - AIN76_only       : AIN76 diet subset, excludes Diet covariate
+                              - HC_only          : HC diet subset, excludes Diet covariate
         --finalreport_files Path to GeneSeek FinalReport file(s) - accepts glob patterns (e.g., 'Data/FinalReport*.txt')
-        --outdir            Output directory [default: results]
+        --outdir            Output directory [default: results, or Results_final/{analysis_type} if --analysis_type set]
         --auto_prefix_samples    Automatically prefix sample IDs [default: false]
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
+        --exclude_covariates  Comma-separated covariates to exclude from model (e.g., 'Diet,batch') [default: null]
+        --interactive_covar Covariate to test as interactive term for GxE analysis (e.g., 'Diet') [default: null]
     
     Pipeline Modules:
         Module 1: Phenotype processing and validation
@@ -44,7 +52,12 @@ def helpMessage() {
         Module 8: Significant QTL identification
         Module 9: QTL visualizations (generates plot_coefCC plots for 99% QTLs)
     
-    Example:
+    Examples:
+        # Using analysis_type preset (recommended):
+        nextflow run main.nf --analysis_type Diet_additive --phenotype_file Data/pheno.csv --study_prefix DOChln
+        nextflow run main.nf --analysis_type HC_only --phenotype_file Data/pheno.csv --study_prefix DOChln
+
+        # Manual configuration (backwards compatible):
         nextflow run main.nf \\
             --phenotype_file Data/formatted_phenotypes_for_nextflow.csv \\
             --finalreport_files 'Data/FinalReport*.txt' \\
@@ -93,6 +106,63 @@ if (!phenotype_input.exists()) {
 
 /*
 ========================================================================================
+    ANALYSIS TYPE PRESET CONFIGURATION
+========================================================================================
+*/
+
+// Valid analysis types
+def validAnalysisTypes = ['Diet_additive', 'Diet_interactive', 'AIN76_only', 'HC_only']
+
+// Validate analysis_type if provided
+if (params.analysis_type && !validAnalysisTypes.contains(params.analysis_type)) {
+    log.error """
+    Invalid --analysis_type: '${params.analysis_type}'
+    Valid options: ${validAnalysisTypes.join(', ')}
+    """.stripIndent()
+    exit 1
+}
+
+// Compute effective parameters based on analysis_type
+// outdir logic: use explicit --outdir if provided, else auto-compute from analysis_type, else default to 'results'
+def effective_outdir = params.outdir ?:
+    (params.analysis_type ? "Results_final/${params.analysis_type}" : 'results')
+
+def effective_sample_filter = params.sample_filter ?: (
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76a"]}' :
+    params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
+)
+
+def effective_exclude_covariates = params.exclude_covariates ?: (
+    params.analysis_type in ['AIN76_only', 'HC_only'] ? 'Diet' : null
+)
+
+def effective_interactive_covar = params.interactive_covar ?: (
+    params.analysis_type == 'Diet_interactive' ? 'Diet' : null
+)
+
+// Override params.outdir so modules use the computed value
+params.outdir = effective_outdir
+
+// Log analysis type configuration
+if (params.analysis_type) {
+    def analysisDescriptions = [
+        'Diet_additive': 'full cohort, additive model',
+        'Diet_interactive': 'full cohort, GxE interaction with Diet',
+        'AIN76_only': 'AIN76 diet subset',
+        'HC_only': 'HC diet subset'
+    ]
+    log.info "Analysis type: ${params.analysis_type} (${analysisDescriptions[params.analysis_type]})"
+    log.info """
+    Auto-configured settings for ${params.analysis_type}:
+        outdir             : ${effective_outdir}
+        sample_filter      : ${effective_sample_filter ?: 'null (full cohort)'}
+        exclude_covariates : ${effective_exclude_covariates ?: 'null'}
+        interactive_covar  : ${effective_interactive_covar ?: 'null (additive model)'}
+    """.stripIndent()
+}
+
+/*
+========================================================================================
     IMPORT MODULES
 ========================================================================================
 */
@@ -115,14 +185,14 @@ include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 */
 
 workflow {
-    
+
     log.info """
     ========================================
      QTL2_NF Pipeline Started
     ========================================
     phenotype_file : ${params.phenotype_file}
     study_prefix   : ${params.study_prefix}
-    outdir         : ${params.outdir}
+    outdir         : ${effective_outdir}
     test_mode      : ${params.test_mode ? 'true (chr 2 only)' : 'false'}
     lod_threshold  : ${params.lod_threshold}
     ========================================
@@ -132,39 +202,48 @@ workflow {
     ch_phenotype_file = Channel.fromPath(params.phenotype_file, checkIfExists: true)
     ch_study_prefix   = Channel.value(params.study_prefix)
     ch_gtf_file       = Channel.fromPath(params.gtf_file, checkIfExists: true)
-    
+
     // MODULE 1: Phenotype Processing
     PHENOTYPE_PROCESS(
         ch_phenotype_file,
         ch_study_prefix,
-        Channel.value(params.sample_filter ?: "null")
+        Channel.value(effective_sample_filter ?: "null"),
+        Channel.value(effective_exclude_covariates ?: "null")
     )
     
     // MODULE 2: Genotype Processing (if FinalReport files provided)
     if (params.finalreport_files) {
         ch_finalreport = Channel.fromPath(params.finalreport_files, checkIfExists: true)
                                 .collect()  // Collect all files into a single emission
-        
+        ch_allele_codes = Channel.fromPath("${projectDir}/Data/GM_allelecodes.csv", checkIfExists: true)
+        ch_founder_genos = Channel.fromPath("${projectDir}/Data/GM_foundergeno*.csv", checkIfExists: true).collect()
+        ch_gmap_files = Channel.fromPath("${projectDir}/Data/GM_gmap*.csv", checkIfExists: true).collect()
+        ch_pmap_files = Channel.fromPath("${projectDir}/Data/GM_pmap*.csv", checkIfExists: true).collect()
+
         GENOTYPE_PROCESS(
             ch_finalreport,
             PHENOTYPE_PROCESS.out.valid_samples,
+            ch_allele_codes,
             ch_study_prefix
         )
-        
+
         // MODULE 3: Control File and Cross2 Object Creation
         GENERATE_CONTROL_FILE(
             PHENOTYPE_PROCESS.out.pheno,
             PHENOTYPE_PROCESS.out.covar,
             GENOTYPE_PROCESS.out.geno_files.collect(),
             GENOTYPE_PROCESS.out.allele_codes,
+            ch_founder_genos,
+            ch_gmap_files,
+            ch_pmap_files,
             ch_study_prefix
         )
         
         CREATE_CROSS2_OBJECT(
             GENERATE_CONTROL_FILE.out.control_file,
-            GENERATE_CONTROL_FILE.out.founder_genos.mix(
-                GENERATE_CONTROL_FILE.out.genetic_maps,
-                GENERATE_CONTROL_FILE.out.physical_maps,
+            ch_founder_genos.mix(
+                ch_gmap_files,
+                ch_pmap_files,
                 PHENOTYPE_PROCESS.out.pheno,
                 PHENOTYPE_PROCESS.out.covar,
                 GENOTYPE_PROCESS.out.geno_files
@@ -205,17 +284,18 @@ workflow {
             .set { ch_batch_ids }
 
         // Process batches in parallel
+        // Use .first() to convert queue channels to value channels for reuse with each
         GENOME_SCAN_BATCH(
             ch_batch_ids,
-            CREATE_CROSS2_OBJECT.out.cross2_object,
-            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
-            PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
-            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
-            GENOME_SCAN_SETUP.out.chunk_file,
-            GENOME_SCAN_SETUP.out.batch_file,
+            CREATE_CROSS2_OBJECT.out.cross2_object.first(),
+            PREPARE_GENOME_SCAN_SETUP.out.genoprob.first(),
+            PREPARE_GENOME_SCAN_SETUP.out.alleleprob.first(),
+            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco.first(),
+            GENOME_SCAN_SETUP.out.chunk_file.first(),
+            GENOME_SCAN_SETUP.out.batch_file.first(),
             ch_study_prefix,
             Channel.value(params.lod_threshold),
-            Channel.value(params.interactive_covar)
+            Channel.value(effective_interactive_covar ?: "null")
         )
 
         // Combine all batch results
@@ -233,7 +313,7 @@ workflow {
 
         // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
         def filtered_phenos_ch
-        def regional_filter_file = "${params.outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
+        def regional_filter_file = "${effective_outdir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
 
         if (params.qtl_region != null) {
             log.info "Filtering QTL peaks to genomic region: ${params.qtl_region}"
@@ -333,7 +413,7 @@ workflow.onComplete {
     Status   : ${workflow.success ? 'SUCCESS' : 'FAILED'}
     Time     : ${workflow.duration}
     Workdir  : ${workflow.workDir}
-    Results  : ${params.outdir}
+    Results  : ${effective_outdir}
     Test Mode: ${params.test_mode ? 'Enabled (chr 2 only)' : 'Disabled'}
     ========================================
     """.stripIndent()

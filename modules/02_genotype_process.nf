@@ -5,6 +5,7 @@ process GENOTYPE_PROCESS {
     input:
     path(finalreport_files)
     path(valid_samples_file)
+    path(allele_codes_file)
     val(prefix)
     
     output:
@@ -46,43 +47,15 @@ validation_log <- c(validation_log, paste("✓ Loaded valid sample list:", lengt
 validation_log <- c(validation_log, paste("✓ Sample filtering will be applied to FinalReport data"))
 validation_log <- c(validation_log, "")
 
-# Download GigaMUGA reference files (build 39)
-cat("Downloading GigaMUGA reference files (build 39)...\\n")
-figshare_url <- "https://figshare.com/ndownloader/files/40233652"
+# Use local GigaMUGA reference files (build 39)
+cat("Using local GigaMUGA reference files (build 39)...\\n")
 
-validation_log <- c(validation_log, "=== Reference Data Download ===")
-validation_log <- c(validation_log, paste("Downloading from:", figshare_url))
+validation_log <- c(validation_log, "=== Reference Data ===")
+validation_log <- c(validation_log, paste("Using local allele codes file:", "${allele_codes_file}"))
 
-tryCatch({
-    download.file(figshare_url, 
-                 destfile = "GM_processed_files_build39.zip", 
-                 method = "auto",
-                 mode = "wb")
-    
-    validation_log <- c(validation_log, "✓ Successfully downloaded GM_processed_files_build39.zip")
-    
-    # Extract the zip file
-    unzip("GM_processed_files_build39.zip", exdir = ".")
-    validation_log <- c(validation_log, "✓ Successfully extracted reference files")
-    
-    # Look for allele codes file in subdirectories
-    cat("DEBUG: Searching for allele codes file with pattern: '.*allelecodes\\\\.csv'\\n")
-    allele_files <- list.files(pattern = ".*allelecodes\\\\.csv", recursive = TRUE, full.names = TRUE)
-    
-    if (length(allele_files) > 0) {
-        # Copy the allele codes file to working directory
-        file.copy(allele_files[1], "GM_allelecodes.csv")
-        validation_log <- c(validation_log, paste("✓ Found allele codes file:", allele_files[1]))
-    } else {
-        stop("No allele codes file found in extracted contents")
-    }
-    
-    # Clean up zip file
-    file.remove("GM_processed_files_build39.zip")
-    
-}, error = function(e) {
-    stop("Failed to download/extract reference files: ", e\$message)
-})
+# Copy the input allele codes file to working directory with expected name
+file.copy("${allele_codes_file}", "GM_allelecodes.csv")
+validation_log <- c(validation_log, "✓ Loaded allele codes file from local Data directory")
 
 # Validate input files exist
 finalreport_list <- strsplit("${finalreport_files}", " ")[[1]]

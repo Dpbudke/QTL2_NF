@@ -6,6 +6,7 @@ process PHENOTYPE_PROCESS {
     path(phenotype_file)
     val(prefix)
     val(sample_filter_json)
+    val(exclude_covariates)
     
     output:
     path("${prefix}_covar.csv"), emit: covar
@@ -277,6 +278,27 @@ process PHENOTYPE_PROCESS {
         validation_log <- c(validation_log, "=== Covariate Filtering ===")
         validation_log <- c(validation_log, "✓ Removed coat_color from covariates (genetic phenotype, not environmental)")
         validation_log <- c(validation_log, paste("✓ Remaining covariates:", paste(colnames(covar_data), collapse = ", ")))
+    }
+
+    # Handle user-specified covariate exclusions
+    exclude_covars_str <- "${exclude_covariates}"
+    if (exclude_covars_str != "null" && nchar(exclude_covars_str) > 0) {
+        # Parse comma-separated list of covariates to exclude
+        exclude_list <- trimws(unlist(strsplit(exclude_covars_str, ",")))
+
+        validation_log <- c(validation_log, "")
+        validation_log <- c(validation_log, "=== User-Specified Covariate Exclusions ===")
+
+        for (covar_to_exclude in exclude_list) {
+            if (covar_to_exclude %in% colnames(covar_data)) {
+                covar_data <- covar_data[, !colnames(covar_data) %in% covar_to_exclude, drop = FALSE]
+                validation_log <- c(validation_log, paste("✓ Removed", covar_to_exclude, "from covariates (user-specified)"))
+            } else {
+                validation_log <- c(validation_log, paste("⚠ WARNING:", covar_to_exclude, "not found in covariates - skipping"))
+            }
+        }
+
+        validation_log <- c(validation_log, paste("✓ Final covariates:", paste(colnames(covar_data), collapse = ", ")))
     }
 
     validation_log <- c(validation_log, paste("  First 5 phenotype names:", paste(head(colnames(pheno_data), 5), collapse = ", ")))
