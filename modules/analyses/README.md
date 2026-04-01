@@ -67,6 +67,23 @@ workflow {
 - **Potential mix-up**: Red points where `min_distance < self_distance` suggest the sample's expression better matches another sample's genotypes
 - Follow up with wet-lab verification for flagged samples
 
+### Sample Mixup Remediation Workflow
+
+If flagged samples need to be removed and the analysis rerun, follow these steps:
+
+1. **Review** `{prefix}_mixup_problems.csv` — samples with `is_problem == TRUE` are candidates for removal. Investigate the `best_match` column to confirm likely mix-ups with wet-lab records before removing.
+
+2. **Return to** `Metadata_phenotype_QTL2_NF.Rmd` — set `mixup_problems_file` to the path of your `*_mixup_problems.csv` output (e.g., `"results/mixup_qc/DOchln_mixup_problems.csv"`).
+
+3. **Reknit the Rmd** — this regenerates `Data/QTL2_NF_meta_pheno_input.csv` with the flagged samples excluded.
+
+4. **Rerun the pipeline from Module 1** using the updated input CSV:
+   ```bash
+   nextflow run main.nf --phenotype_file Data/QTL2_NF_meta_pheno_input.csv --prefix DOchln
+   ```
+
+> **Note**: Broman mixup QC requires eQTL results (Module 8 output), so the full pipeline must complete successfully before running mixup QC. The remediation loop is: full pipeline run → mixup QC → filter Rmd → regenerate CSV → rerun pipeline.
+
 ---
 
 ## Cis vs Trans eQTL Classification
@@ -99,7 +116,7 @@ Classifies significant eQTLs as **cis-acting** (local) or **trans-acting** (dist
 ```bash
 nextflow run workflow_cis_trans_classification.nf \
     --qtl_file Results_final/results/08_significant_qtls/DOchln_significant_qtls.csv \
-    --gtf_file Data/Mus_musculus.GRCm39.105.gtf.gz \
+    --gtf_file Data/Mus_musculus.GRCm39.113.gtf.gz \
     --cis_window_mb 2.0 \
     --outdir results_cis_trans \
     -profile standard

@@ -154,7 +154,30 @@ cat("Phenotype prefix patterns:", paste(phenotype_pattern, collapse = ", "), "\n
 ```
 
 ```{r}
-### Key Note: this section SHOULD have the filtering out of Broman mixups identified, but somehow it got deleted 
+# Broman Mixup QC filtering
+# After running broman_mixup_qc, set this path to the output CSV to remove flagged samples.
+# Set to NULL to skip.
+mixup_problems_file <- NULL  # e.g., "results/mixup_qc/DOchln_mixup_problems.csv"
+
+if (!is.null(mixup_problems_file) && file.exists(mixup_problems_file)) {
+  mixup_problems <- read.csv(mixup_problems_file, stringsAsFactors = FALSE)
+  problem_samples <- mixup_problems$sample[mixup_problems$is_problem == TRUE]
+
+  cat("Broman mixup problems identified:", length(problem_samples), "\n")
+  cat("Flagged samples:", paste(problem_samples, collapse = ", "), "\n")
+
+  samples_to_remove <- intersect(problem_samples, colnames(Phenotypes_clean))
+  if (length(samples_to_remove) > 0) {
+    Phenotypes_clean <- Phenotypes_clean %>% select(-all_of(samples_to_remove))
+    cat("Removed", length(samples_to_remove), "mixup sample(s) from phenotype data\n")
+  } else {
+    cat("WARNING: No problem sample IDs matched phenotype column names\n")
+    cat("  Problem IDs:          ", paste(problem_samples, collapse = ", "), "\n")
+    cat("  Available cols (1:10):", paste(colnames(Phenotypes_clean)[1:10], collapse = ", "), "\n")
+  }
+} else {
+  cat("mixup_problems_file is NULL or not found — skipping Broman mixup filtering\n")
+}
 ```
 
 # 5. Generate r/qtl2 - QTL2_NF input
@@ -253,7 +276,7 @@ cat("File verification - first 3 rows, first 8 columns:\n")
 print(check[1:3, 1:8])
 
 cat("\nReady for Nextflow command:\n")
-cat("nextflow run main.nf --phenotype_file QTL2_NF_meta_pheno_input.csv --prefix DOchln\n")
+cat("nextflow run main.nf --phenotype_file QTL2_NF_meta_pheno_input.csv --prefix DOchln\n") 
 ```
 
 # QTL2_NF Module 1 input metadata/phenotype CSV is now ready to rock

@@ -7,6 +7,7 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     input:
     path qtl_file
     path gtf_file
+    path cross2_file
 
     output:
     path "eqtl_cis_trans_classification.csv", emit: classification
@@ -19,10 +20,37 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     #!/usr/bin/env Rscript
 
     library(data.table)
+    library(qtl2)
 
     # Read significant QTLs
     cat("Reading QTL data...\\n")
     qtls <- fread("${qtl_file}")
+
+    # Load cross2 object to get genetic and physical maps
+    cat("Loading cross2 object for coordinate conversion...\\n")
+    cross2 <- readRDS("${cross2_file}")
+    gmap <- cross2\$gmap
+    pmap <- cross2\$pmap
+
+    # Convert QTL positions from cM to Mb using interpolation
+    cat("Converting QTL positions from cM to Mb...\\n")
+    qtls[, pos_mb := {
+        result <- numeric(.N)
+        for (i in seq_len(.N)) {
+            chr_name <- as.character(chr[i])
+            pos_cM <- pos[i]
+            if (chr_name %in% names(gmap) && chr_name %in% names(pmap)) {
+                chr_gmap <- gmap[[chr_name]]
+                chr_pmap <- pmap[[chr_name]]
+                result[i] <- approx(chr_gmap, chr_pmap, xout = pos_cM, rule = 2)\$y
+            } else {
+                result[i] <- NA_real_
+            }
+        }
+        result
+    }]
+
+    cat("  Converted", sum(!is.na(qtls\$pos_mb)), "of", nrow(qtls), "QTL positions\\n")
 
     # Read and process GTF file
     cat("Reading GTF annotation...\\n")
@@ -49,9 +77,9 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     # Join QTLs with gene annotations using merge
     qtl_classification <- merge(qtls, genes, by.x = "lodcolumn", by.y = "gene_id", all.x = TRUE)
 
-    # Calculate distance between QTL peak and TSS
+    # Calculate distance between QTL peak (in Mb) and TSS (in Mb)
     qtl_classification[, same_chr := (chr.x == chr.y)]
-    qtl_classification[, distance_to_tss_mb := abs(pos - tss_mb)]
+    qtl_classification[, distance_to_tss_mb := abs(pos_mb - tss_mb)]
 
     # Classify as cis or trans
     qtl_classification[, eqtl_type := "trans"]
@@ -61,7 +89,8 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     # Rename columns for clarity
     setnames(qtl_classification, "chr.x", "qtl_chr")
     setnames(qtl_classification, "chr.y", "gene_chr")
-    setnames(qtl_classification, "pos", "qtl_pos_mb")
+    setnames(qtl_classification, "pos", "qtl_pos_cM")
+    setnames(qtl_classification, "pos_mb", "qtl_pos_mb")
     setnames(qtl_classification, "start", "gene_start")
     setnames(qtl_classification, "end", "gene_end")
     setnames(qtl_classification, "strand", "gene_strand")
@@ -70,7 +99,7 @@ process CLASSIFY_CIS_TRANS_EQTLS {
 
     # Reorder columns
     col_order <- c("lodindex", "lodcolumn", "gene_name",
-                   "qtl_chr", "qtl_pos_mb",
+                   "qtl_chr", "qtl_pos_cM", "qtl_pos_mb",
                    "gene_chr", "gene_start", "gene_end", "gene_strand", "gene_tss", "gene_tss_mb",
                    "distance_to_tss_mb", "eqtl_type",
                    "lod", "ci_lo", "ci_hi",
