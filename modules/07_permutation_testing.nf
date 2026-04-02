@@ -232,6 +232,7 @@ process PERM_VALIDATE_BATCHES {
     input:
     path(phenotype_list)
     val(study_prefix)
+    val(trigger)   // ensures all PERM_BATCH_JOB processes finish before validation runs
 
     output:
     path("${study_prefix}_batch_validation_report.txt"), emit: validation_report
@@ -760,7 +761,8 @@ workflow CHUNKED_PERMUTATION_TESTING {
 
             PERM_VALIDATE_BATCHES(
                 PERM_SETUP.out.phenotype_list,
-                study_prefix
+                study_prefix,
+                validation_trigger.map { 'ready' }.first()
             )
 
             // Step 5: Repair corrupt/missing batches if validation failed
@@ -794,13 +796,11 @@ workflow CHUNKED_PERMUTATION_TESTING {
                 ch_repair_batches.map { it[1] }   // batch_num
             )
 
-            // Step 6: Combine all batches for aggregation
-            // After repairs (if any), collect all batch files from published directory
-            def ch_all_batches = PERM_REPAIR_BATCH.out.repaired_batch
-                .collect()
-                .ifEmpty([])  // Empty if no repairs needed
-                .mix(Channel.fromPath("${batch_results_dir}/${params.study_prefix}_*_batch_*.rds").collect())
-                .collect()
+            // Step 6: Aggregate all batch results
+            // Collect only the direct batch job outputs for aggregation
+            // Repair batches are published to the same directory and will be
+            // picked up on a subsequent run if needed
+            def ch_all_batches = PERM_BATCH_JOB.out.perm_result.collect()
 
             PERM_AGGREGATE(
                 ch_all_batches,

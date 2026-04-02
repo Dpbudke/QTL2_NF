@@ -280,3 +280,106 @@ cat("nextflow run main.nf --phenotype_file QTL2_NF_meta_pheno_input.csv --prefix
 ```
 
 # QTL2_NF Module 1 input metadata/phenotype CSV is now ready to rock
+
+------------------------------------------------------------------------
+
+# 6. LCMS Metabolite Phenotypes — Generate r/qtl2 Input
+
+```{r}
+# Purpose: Prepare LCMS metabolite phenotypes as a separate QTL2_NF input file.
+# These phenotypes are already ln-transformed — no RNA-seq normalization needed.
+# Output: Data/QTL2_NF_meta_pheno_LCMS_input.csv
+# Run the pipeline with: --phenotype_file Data/QTL2_NF_meta_pheno_LCMS_input.csv --study_type LCMS
+conflicts_prefer(stats::filter)
+conflicts_prefer(dplyr::mutate)
+conflicts_prefer(dplyr::select)
+
+# --- Load LCMS mapping file ---
+lcms_raw <- read.table(
+  "Data/R_Data/DOCholine_Q2_mapping_file_220830_corrected_withAddedData.txt",
+  sep = "\t", header = TRUE, stringsAsFactors = FALSE, comment.char = ""
+)
+
+cat("LCMS file dimensions:", dim(lcms_raw), "\n")
+cat("Column names (first 20):\n")
+print(colnames(lcms_raw)[1:20])
+
+# --- Define phenotype columns ---
+lcms_pheno_cols <- c(
+  "TMAO_base_ln", "Choline_base_ln", "Betaine_base_ln",
+  "Carnitine_base_ln", "Phosphocholine_base_ln",
+  "TMAO_final_ln", "Choline_final_ln", "Betaine_final_ln",
+  "Carnitine_final_ln", "Phosphocholine_final_ln"
+)
+
+# --- Extract and rename relevant columns ---
+lcms_data <- lcms_raw %>%
+  dplyr::select(
+    MouseID,
+    batch,
+    Sex      = sex,
+    generation,
+    coat_color,
+    Diet     = diet_arm,
+    all_of(lcms_pheno_cols)
+  ) %>%
+  dplyr::mutate(MouseID = gsub("^DOChln", "DOchln", MouseID)) %>%
+  dplyr::filter(grepl("^DOchln_[0-9]+$", MouseID)) %>%
+  dplyr::distinct(MouseID, .keep_all = TRUE) %>%
+  dplyr::filter(rowSums(!is.na(dplyr::select(., all_of(lcms_pheno_cols)))) > 0)
+
+cat("Samples after filtering:", nrow(lcms_data), "\n")
+cat("NA counts per phenotype:\n")
+print(colSums(is.na(lcms_data[, lcms_pheno_cols])))
+
+# --- Standardize Diet values to match eQTL pipeline format ---
+# (AIN76 samples should be "ain76a", HC samples should be "hc")
+cat("\nDiet values before standardization:\n")
+print(table(lcms_data$Diet, useNA = "ifany"))
+lcms_data <- lcms_data %>%
+  mutate(Diet = tolower(trimws(Diet)))
+cat("Diet values after standardization:\n")
+print(table(lcms_data$Diet, useNA = "ifany"))
+
+# --- Format for r/qtl2 CSV (3-row header structure) ---
+covariate_columns <- c("batch", "Sex", "generation", "coat_color", "Diet")
+n_covariates  <- length(covariate_columns)
+n_phenotypes  <- length(lcms_pheno_cols)
+
+final_lcms <- lcms_data %>%
+  select(SampleID = MouseID, all_of(covariate_columns), all_of(lcms_pheno_cols))
+
+cat("\nFormatting for r/qtl2:\n")
+cat("- Samples:    ", nrow(final_lcms), "\n")
+cat("- Covariates: ", n_covariates, "\n")
+cat("- Phenotypes: ", n_phenotypes, "\n")
+
+# Row 1: type indicators
+row1_lcms <- c("", "covariate", rep("", n_covariates - 1), "phenotype", rep("", n_phenotypes - 1))
+
+# Row 2: column names
+row2_lcms <- colnames(final_lcms)
+
+# Data rows
+data_matrix_lcms <- as.matrix(final_lcms)
+mode(data_matrix_lcms) <- "character"
+
+all_rows_lcms <- rbind(row1_lcms, row2_lcms, data_matrix_lcms)
+
+write.table(all_rows_lcms, "Data/QTL2_NF_meta_pheno_LCMS_input.csv",
+            sep = ",", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+cat("Created: Data/QTL2_NF_meta_pheno_LCMS_input.csv\n")
+cat("Dimensions:", nrow(all_rows_lcms), "rows x", ncol(all_rows_lcms), "columns\n")
+
+# Verify structure
+check_lcms <- read.csv("Data/QTL2_NF_meta_pheno_LCMS_input.csv", nrows = 3,
+                       header = FALSE, stringsAsFactors = FALSE)
+cat("\nVerification — first 3 rows, all columns:\n")
+print(check_lcms)
+
+cat("\nReady to run LCMS QTL analysis:\n")
+cat("nextflow run main.nf --phenotype_file Data/QTL2_NF_meta_pheno_LCMS_input.csv --study_type LCMS --analysis_type Diet_additive --study_prefix DOchln -profile slurm\n")
+```
+
+# LCMS input CSV is now ready — run with --study_type LCMS --analysis_type {Diet_additive\|Diet_interactive\|AIN76_only\|HC_only}

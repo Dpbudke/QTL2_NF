@@ -254,7 +254,13 @@ process GENOME_SCAN_BATCH {
     }
 
     # Combine batch results
-    batch_combined <- do.call(cbind, batch_results)
+    # Note: qtl2's cbind.scan1 has a bug when called with a single object (returns
+    # uninitialized 'result' variable). Bypass cbind for single-chunk batches.
+    if (length(batch_results) == 1) {
+        batch_combined <- batch_results[[1]]
+    } else {
+        batch_combined <- do.call(cbind, batch_results)
+    }
 
     # Save batch results
     saveRDS(batch_combined, "${prefix}_batch${batch_id}_results.rds")
@@ -313,7 +319,7 @@ process COMBINE_BATCH_RESULTS {
 
     cat("Loading", length(batch_files), "batch results...\\n")
     scan_list <- lapply(batch_files, readRDS)
-    combined_scan <- do.call(cbind, scan_list)
+    combined_scan <- if (length(scan_list) == 1) scan_list[[1]] else do.call(cbind, scan_list)
 
     saveRDS(combined_scan, "${prefix}_scan_results.rds")
     cat("Combined scan results saved\\n\\n")

@@ -8,7 +8,6 @@ process VISUALIZE_QTLS {
 
     input:
     path(alleleprob_file)
-    path(genetic_map_file)
     path(scan_results_file)
     path(cross2_file)
     path(significant_qtls_file)
@@ -39,9 +38,11 @@ process VISUALIZE_QTLS {
 
     # Load data
     alleleprobs <- readRDS("${alleleprob_file}")
-    gmap <- readRDS("${genetic_map_file}")
     scan_results <- readRDS("${scan_results_file}")
     cross2 <- readRDS("${cross2_file}")
+
+    # Use physical map (Mb) from cross2 instead of genetic map (cM)
+    pmap <- cross2\$pmap
 
     # Load significant QTLs and filter to 99% significance level
     significant_qtls <- read.csv("${significant_qtls_file}", stringsAsFactors = FALSE)
@@ -49,7 +50,7 @@ process VISUALIZE_QTLS {
 
     validation_log <- c(validation_log, "=== Data Loading Complete ===")
     validation_log <- c(validation_log, paste("✓ Alleleprobs loaded:", length(alleleprobs), "chromosomes"))
-    validation_log <- c(validation_log, paste("✓ Genetic map loaded:", length(gmap), "chromosomes"))
+    validation_log <- c(validation_log, paste("✓ Physical map loaded:", length(pmap), "chromosomes (positions in Mb)"))
     validation_log <- c(validation_log, paste("✓ Scan results loaded:", paste(dim(scan_results), collapse=" x ")))
     validation_log <- c(validation_log, paste("✓ Cross2 object loaded:", nrow(cross2\$pheno), "individuals,", ncol(cross2\$pheno), "phenotypes"))
     validation_log <- c(validation_log, paste("✓ Total significant QTLs (99%):", nrow(qtls_99)))
@@ -95,8 +96,8 @@ process VISUALIZE_QTLS {
             # Calculate coefficients for this chromosome and phenotype
             coef_chr <- scan1coef(alleleprobs[, chr], cross2\$pheno[, gene_id, drop=FALSE])
 
-            # Extract chromosome-specific genetic map
-            gmap_chr <- gmap[chr]
+            # Extract chromosome-specific physical map
+            pmap_chr <- pmap[chr]
 
             # Extract scan results for this phenotype (all chromosomes for context)
             # but we'll focus on the specific chromosome in the plot
@@ -106,8 +107,8 @@ process VISUALIZE_QTLS {
             png(filename, width=800, height=600)
             par(mar=c(4.1, 4.1, 0.6, 0.6))
 
-            # Generate plot with allele effects and LOD score
-            plot_coefCC(coef_chr, gmap_chr, scan1_output=scan_pheno,
+            # Generate plot with allele effects and LOD score (positions in Mb)
+            plot_coefCC(coef_chr, pmap_chr, scan1_output=scan_pheno,
                        bgcolor="gray95", legend="bottomleft")
 
             # Close device

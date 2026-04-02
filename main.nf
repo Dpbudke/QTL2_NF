@@ -34,6 +34,8 @@ def helpMessage() {
                               - HC_only          : HC diet subset, excludes Diet covariate
         --finalreport_files Path to GeneSeek FinalReport file(s) - accepts glob patterns (e.g., 'Data/FinalReport*.txt')
         --outdir            Output directory [default: results, or Results_final/{analysis_type} if --analysis_type set]
+        --study_type        Optional prefix for output directory (e.g. 'LCMS' or 'eQTL').
+                            When set, outdir becomes Results_final/{study_type}/{analysis_type}
         --auto_prefix_samples    Automatically prefix sample IDs [default: false]
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
@@ -123,9 +125,11 @@ if (params.analysis_type && !validAnalysisTypes.contains(params.analysis_type)) 
 }
 
 // Compute effective parameters based on analysis_type
-// outdir logic: use explicit --outdir if provided, else auto-compute from analysis_type, else default to 'results'
+// outdir logic: use explicit --outdir if provided, else auto-compute from analysis_type (+study_type), else default to 'results'
 def effective_outdir = params.outdir ?:
-    (params.analysis_type ? "Results_final/${params.analysis_type}" : 'results')
+    (params.analysis_type ?
+        (params.study_type ? "Results_final/${params.study_type}/${params.analysis_type}" : "Results_final/${params.analysis_type}")
+        : 'results')
 
 def effective_sample_filter = params.sample_filter ?: (
     params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76a"]}' :
@@ -370,7 +374,6 @@ workflow {
 
         VISUALIZE_QTLS(
             PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
-            PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
             COMBINE_BATCH_RESULTS.out.scan_results,
             CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
             IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,

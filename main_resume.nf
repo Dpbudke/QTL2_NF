@@ -14,12 +14,18 @@ nextflow.enable.dsl = 2
 params.phenotype_file = null
 params.finalreport_files = null
 params.study_prefix = null
-params.outdir = 'results'
+params.outdir = null          // Resolved from analysis_type/study_type (see config auto-compute block)
 params.auto_prefix_samples = false
 params.test_mode = false
 params.lod_threshold = 7.0
 params.sample_filter = null
+params.interactive_covar = null
+params.exclude_covariates = null
 params.help = false
+
+// Analysis type preset (mirrors main.nf — auto-configures outdir, interactive_covar, etc.)
+params.analysis_type = null   // 'Diet_additive', 'Diet_interactive', 'AIN76_only', 'HC_only'
+params.study_type = null      // Set via config default ('eQTL') or override (e.g. 'LCMS')
 
 // Resume parameters
 params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, visualize
@@ -118,6 +124,59 @@ if (params.resume_from && !params.study_prefix) {
 
 /*
 ========================================================================================
+    ANALYSIS TYPE PRESET CONFIGURATION (mirrors main.nf)
+========================================================================================
+*/
+
+def validAnalysisTypes = ['Diet_additive', 'Diet_interactive', 'AIN76_only', 'HC_only']
+
+if (params.analysis_type && !validAnalysisTypes.contains(params.analysis_type)) {
+    log.error """
+    Invalid --analysis_type: '${params.analysis_type}'
+    Valid options: ${validAnalysisTypes.join(', ')}
+    """.stripIndent()
+    exit 1
+}
+
+// Note: params.outdir is already resolved by the config auto-compute block when analysis_type is set.
+// The effective_* variables below are needed for interactive_covar / sample_filter / exclude_covariates
+// which the config block does not set (those are only used at runtime, not in publishDir paths).
+
+def effective_outdir = params.outdir ?: 'results'
+
+def effective_sample_filter = params.sample_filter ?: (
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76a"]}' :
+    params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
+)
+
+def effective_exclude_covariates = params.exclude_covariates ?: (
+    params.analysis_type in ['AIN76_only', 'HC_only'] ? 'Diet' : null
+)
+
+def effective_interactive_covar = params.interactive_covar ?: (
+    params.analysis_type == 'Diet_interactive' ? 'Diet' : null
+)
+
+if (params.analysis_type) {
+    def analysisDescriptions = [
+        'Diet_additive': 'full cohort, additive model',
+        'Diet_interactive': 'full cohort, GxE interaction with Diet',
+        'AIN76_only': 'AIN76 diet subset',
+        'HC_only': 'HC diet subset'
+    ]
+    log.info "Analysis type: ${params.analysis_type} (${analysisDescriptions[params.analysis_type]})"
+    log.info """
+    Auto-configured settings for ${params.analysis_type}:
+        outdir             : ${effective_outdir}
+        resume_from        : ${params.resume_from ?: 'beginning (full run)'}
+        sample_filter      : ${effective_sample_filter ?: 'null (full cohort)'}
+        exclude_covariates : ${effective_exclude_covariates ?: 'null'}
+        interactive_covar  : ${effective_interactive_covar ?: 'null (additive model)'}
+    """.stripIndent()
+}
+
+/*
+========================================================================================
     IMPORT MODULES
 ========================================================================================
 */
@@ -209,7 +268,8 @@ workflow {
         PHENOTYPE_PROCESS(
             ch_phenotype_file,
             ch_study_prefix,
-            Channel.value(params.sample_filter ?: "null")
+            Channel.value(effective_sample_filter ?: "null"),
+            Channel.value(effective_exclude_covariates ?: "null")
         )
 
         ch_pheno = PHENOTYPE_PROCESS.out.pheno
@@ -354,44 +414,26 @@ workflow {
                 GENOME_SCAN_SETUP.out.batch_file,
                 ch_study_prefix,
                 Channel.value(params.lod_threshold),
-                Channel.value(params.interactive_covar)
+                Channel.value(effective_interactive_covar ?: "null")
             )
 
-            // Check if we need to run COMBINE or if batch results already exist
-            def batch_results_dir = "${params.outdir}/06_qtl_analysis/batches"
-            def combined_results_file = "${params.outdir}/06_qtl_analysis/${params.study_prefix}_scan_results.rds"
+            // Connect COMBINE_BATCH_RESULTS directly to GENOME_SCAN_BATCH channel outputs
+            // (mirrors main.nf — reactive channel graph ensures combine runs after all batches finish)
+            COMBINE_BATCH_RESULTS(
+                GENOME_SCAN_BATCH.out.batch_results.collect(),
+                GENOME_SCAN_BATCH.out.batch_peaks.collect(),
+                GENOME_SCAN_BATCH.out.batch_filtered_phenos.collect(),
+                GENOME_SCAN_BATCH.out.batch_log.collect(),
+                ch_study_prefix,
+                Channel.value(params.lod_threshold)
+            )
 
-            if (file(combined_results_file).exists()) {
-                log.info "Combined results already exist - skipping COMBINE_BATCH_RESULTS"
-                ch_scan_results = Channel.fromPath(combined_results_file)
-                ch_peaks = Channel.fromPath("${params.outdir}/06_qtl_analysis/${params.study_prefix}_all_peaks.csv")
-                ch_filtered_phenotypes = Channel.fromPath("${params.outdir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt")
-            } else {
-                log.info "Combining batch results from published files"
+            ch_scan_results = COMBINE_BATCH_RESULTS.out.scan_results
+            ch_peaks = COMBINE_BATCH_RESULTS.out.peaks
+            ch_filtered_phenotypes = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
 
-                // Instead of collecting from channels, read from published batch directory
-                // This avoids the .collect() hang issue when batch jobs are cached
-                Channel.fromPath("${batch_results_dir}/*_batch*_results.rds").collect().set { ch_batch_results_files }
-                Channel.fromPath("${batch_results_dir}/*_batch*_peaks.csv").collect().set { ch_batch_peaks_files }
-                Channel.fromPath("${batch_results_dir}/*_batch*_filtered_phenos.txt").collect().set { ch_batch_phenos_files }
-                Channel.fromPath("${batch_results_dir}/*_batch*_log.txt").collect().set { ch_batch_log_files }
-
-                COMBINE_BATCH_RESULTS(
-                    ch_batch_results_files,
-                    ch_batch_peaks_files,
-                    ch_batch_phenos_files,
-                    ch_batch_log_files,
-                    ch_study_prefix,
-                    Channel.value(params.lod_threshold)
-                )
-
-                ch_scan_results = COMBINE_BATCH_RESULTS.out.scan_results
-                ch_peaks = COMBINE_BATCH_RESULTS.out.peaks
-                ch_filtered_phenotypes = COMBINE_BATCH_RESULTS.out.filtered_phenotypes
-
-                COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
-                COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
-            }
+            COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
+            COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
 
         } else {
             log.info "Skipping GENOME_SCAN_BATCH - loading from existing files"
@@ -546,7 +588,6 @@ workflow {
 
             VISUALIZE_QTLS(
                 ch_alleleprob,
-                ch_genetic_map,
                 ch_scan_results,
                 ch_filtered_cross2,
                 ch_significant_qtls,
