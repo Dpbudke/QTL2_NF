@@ -72,8 +72,8 @@ RUN R -e "install.packages(c( \
     ), repos='https://cran.rstudio.com/', dependencies=TRUE)"
 
 # Module 10: TIMBR allelic series analysis
-RUN R -e "install.packages('ape', repos='https://cran.rstudio.com/', dependencies=TRUE)"
-RUN R -e "devtools::install_github('wesleycrouse/TIMBR', dependencies=TRUE, upgrade='never')"
+RUN R -e "install.packages(c('ape', 'remotes'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+RUN R -e "remotes::install_github('wesleycrouse/TIMBR', dependencies=TRUE, upgrade='never')"
 RUN R -e "library(TIMBR); cat('TIMBR version:', as.character(packageVersion('TIMBR')), '\n')"
 
 # Install Bioconductor packages if needed for future modules
