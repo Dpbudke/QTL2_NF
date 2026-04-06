@@ -28,7 +28,7 @@ params.analysis_type = null   // 'Diet_additive', 'Diet_interactive', 'AIN76_onl
 params.study_type = null      // Set via config default ('eQTL') or override (e.g. 'LCMS')
 
 // Resume parameters
-params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, visualize
+params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, visualize, timbr
 params.input_dir = null    // Directory to load cached results from (defaults to outdir if not specified)
 
 // Print help message
@@ -60,6 +60,7 @@ def helpMessage() {
                             permutation     - Start from permutation testing
                             significant_qtls - Start from QTL identification
                             visualize       - Start from QTL visualization
+                            timbr           - Start from TIMBR allelic series analysis (requires --run_timbr)
 
     Other Arguments:
         --finalreport_files  Path to GeneSeek FinalReport file(s)
@@ -95,7 +96,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize']
+                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -191,6 +192,7 @@ include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf
 include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
+include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 
 /*
 ========================================================================================
@@ -213,7 +215,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize']
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -591,12 +593,37 @@ workflow {
                 ch_scan_results,
                 ch_filtered_cross2,
                 ch_significant_qtls,
-                ch_study_prefix
+                ch_study_prefix,
+                ch_kinship_loco,
+                Channel.value(effective_interactive_covar ?: "null")
             )
 
             VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
         } else {
             log.info "Skipping QTL visualization - will resume from this step if needed"
+        }
+
+        // MODULE 10: TIMBR Allelic Series Analysis (opt-in, requires rebuilt container)
+        if (params.run_timbr && shouldRunStep('timbr', params.resume_from)) {
+            // Load significant QTLs from file if resuming from timbr
+            def ch_sig_qtls_timbr = (params.resume_from == 'timbr')
+                ? Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs for TIMBR"))
+                : ch_significant_qtls
+
+            TIMBR_ANALYSIS(
+                ch_filtered_cross2,
+                ch_genoprob,
+                ch_genetic_map,
+                ch_sig_qtls_timbr,
+                ch_study_prefix,
+                Channel.value(params.timbr_sig_level),
+                Channel.value(params.timbr_qtls_per_batch),
+                Channel.value(params.timbr_samples)
+            )
+            TIMBR_ANALYSIS.out.master_summary.view { "TIMBR master summary: $it" }
+            TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
+        } else if (!params.run_timbr) {
+            log.info "Skipping TIMBR (--run_timbr not set)"
         }
 
     } else {

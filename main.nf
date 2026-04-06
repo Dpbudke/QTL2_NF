@@ -181,6 +181,7 @@ include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf
 include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
+include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 
 /*
 ========================================================================================
@@ -377,11 +378,31 @@ workflow {
             COMBINE_BATCH_RESULTS.out.scan_results,
             CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
             IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-            ch_study_prefix
+            ch_study_prefix,
+            PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
+            Channel.value(effective_interactive_covar ?: "null")
         )
 
         // Display results for Module 9
         VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
+
+        // MODULE 10: TIMBR Allelic Series Analysis (opt-in, requires rebuilt container)
+        if (params.run_timbr) {
+            TIMBR_ANALYSIS(
+                CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
+                PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                ch_study_prefix,
+                Channel.value(params.timbr_sig_level),
+                Channel.value(params.timbr_qtls_per_batch),
+                Channel.value(params.timbr_samples)
+            )
+            TIMBR_ANALYSIS.out.master_summary.view { "TIMBR master summary: $it" }
+            TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
+        } else {
+            log.info "Skipping TIMBR (--run_timbr not set)"
+        }
 
         // Display results for Modules 5-8
         PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }

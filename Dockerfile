@@ -71,6 +71,11 @@ RUN R -e "install.packages(c( \
     'rmarkdown' \
     ), repos='https://cran.rstudio.com/', dependencies=TRUE)"
 
+# Module 10: TIMBR allelic series analysis
+RUN R -e "install.packages('ape', repos='https://cran.rstudio.com/', dependencies=TRUE)"
+RUN R -e "devtools::install_github('wesleycrouse/TIMBR', dependencies=TRUE, upgrade='never')"
+RUN R -e "library(TIMBR); cat('TIMBR version:', as.character(packageVersion('TIMBR')), '\n')"
+
 # Install Bioconductor packages if needed for future modules
 RUN R -e "if (!require('BiocManager', quietly = TRUE)) install.packages('BiocManager'); \
     BiocManager::install(c( \
