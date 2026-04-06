@@ -90,18 +90,8 @@ RUN mkdir -p /opt/bin \
     && mkdir -p /opt/data \
     && mkdir -p /data
 
-# Copy all custom QTL pipeline scripts
-# Module 1: Phenotype processing
-COPY bin/robustZmat.R /opt/bin/robustZmat.R  
-COPY bin/covCheck.R /opt/bin/covCheck.R
-
-# Future modules (create placeholders or add as you develop)
-# COPY bin/genoQC.R /opt/bin/genoQC.R
-# COPY bin/crossValidation.R /opt/bin/crossValidation.R
-# COPY bin/qtlPlots.R /opt/bin/qtlPlots.R
-
-# Make all scripts executable and accessible
-RUN chmod +x /opt/bin/*.R
+# Make scripts directory accessible (scripts are embedded in Nextflow process blocks)
+RUN true
 ENV PATH="/opt/bin:${PATH}"
 
 # Create a pipeline utilities script for common functions
