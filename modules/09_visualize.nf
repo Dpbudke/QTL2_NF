@@ -124,7 +124,7 @@ process VISUALIZE_QTLS {
     # Each QTL produces: 1 chromosome-wide LOD plot + 1 effects plot per group
     cat("Generating QTL LOD and effect plots...\\n")
     n_groups <- if (do_stratify) 1 + length(diet_levels) else 1
-    n_plots_per_qtl <- 1 + n_groups   # 1 LOD + n_groups effects
+    n_plots_per_qtl <- 1 + (n_groups * 2)   # 1 LOD + n_groups x (coef + blup)
     cat("This will generate up to", nrow(qtls_99) * n_plots_per_qtl, "plots (",
         nrow(qtls_99), "QTLs x", n_plots_per_qtl, "images each: 1 LOD +", n_groups, "effects)\\n")
 
@@ -207,14 +207,15 @@ process VISUALIZE_QTLS {
                 ac_g <- if (!is.null(g\$ac) && nrow(g\$ac) > 0) g\$ac[intersect(ids, rownames(g\$ac)), , drop = FALSE] else NULL
                 ic_g <- if (!is.null(g\$ic) && nrow(g\$ic) > 0) g\$ic[intersect(ids, rownames(g\$ic)), , drop = FALSE] else NULL
 
-                eff_fname <- if (do_stratify) {
-                    file.path(qtl_dir, paste0(grp_name, "_effects.png"))
-                } else {
-                    file.path(chr_dir, paste0(base_name, "_effects.png"))
-                }
-
                 kin_g     <- kinship[[chr]][ids, ids]
                 pheno_mat <- cross2\$pheno[ids, gene_id, drop = FALSE]
+
+                # ── scan1coef effects plot ────────────────────────────────────
+                coef_fname <- if (do_stratify) {
+                    file.path(qtl_dir, paste0(grp_name, "_coef_effects.png"))
+                } else {
+                    file.path(chr_dir, paste0(base_name, "_coef_effects.png"))
+                }
 
                 coef_win <- scan1coef(ap_win[ids, chr],
                                       pheno_mat,
@@ -223,16 +224,43 @@ process VISUALIZE_QTLS {
                                       intcovar = ic_g)
 
                 model_label <- if (!is.null(ic_g)) "GxE intcovar" else "addcovar only"
-                png(eff_fname, width = 900, height = 500)
+                png(coef_fname, width = 900, height = 500)
                 par(mar = c(4.5, 4.5, 3.5, 0.5))
                 plot_coefCC(coef_win, pmap_win,
                             bgcolor = "gray95",
                             legend  = "bottomleft",
                             xlab    = paste("Chr", chr, "position (Mb)"))
-                title(main = sprintf("%s — %s  [%.1f–%.1f Mb]  (N=%d)",
+                title(main = sprintf("%s [coef] — %s  [%.1f–%.1f Mb]  (N=%d)",
                                      g\$label, gene_id, win_lo, win_hi, length(ids)))
                 mtext(sprintf("+/-%g Mb window | peak %s (%.2f Mb) | %s",
                               HALF_WIN_MB, peak_marker, peak_Mb, model_label),
+                      side = 3, line = 0.1, cex = 0.65, col = "gray40", font = 3)
+                dev.off()
+                plots_generated <- plots_generated + 1
+
+                # ── scan1blup effects plot (additive only; intcovar not supported) ──
+                blup_fname <- if (do_stratify) {
+                    file.path(qtl_dir, paste0(grp_name, "_blup_effects.png"))
+                } else {
+                    file.path(chr_dir, paste0(base_name, "_blup_effects.png"))
+                }
+
+                blup_win <- scan1blup(ap_win[ids, chr],
+                                      pheno_mat,
+                                      kinship  = kin_g,
+                                      addcovar = ac_g)
+
+                blup_label <- if (!is.null(ic_g)) "addcovar only (BLUP; intcovar not supported)" else "addcovar only"
+                png(blup_fname, width = 900, height = 500)
+                par(mar = c(4.5, 4.5, 3.5, 0.5))
+                plot_coefCC(blup_win, pmap_win,
+                            bgcolor = "gray95",
+                            legend  = "bottomleft",
+                            xlab    = paste("Chr", chr, "position (Mb)"))
+                title(main = sprintf("%s [BLUP] — %s  [%.1f–%.1f Mb]  (N=%d)",
+                                     g\$label, gene_id, win_lo, win_hi, length(ids)))
+                mtext(sprintf("+/-%g Mb window | peak %s (%.2f Mb) | %s",
+                              HALF_WIN_MB, peak_marker, peak_Mb, blup_label),
                       side = 3, line = 0.1, cex = 0.65, col = "gray40", font = 3)
                 dev.off()
                 plots_generated <- plots_generated + 1
@@ -283,6 +311,7 @@ process VISUALIZE_QTLS {
     validation_log <- c(validation_log, paste("✓ Output organized by chromosome in chr*/ subdirectories"))
     validation_log <- c(validation_log, paste("✓ LOD plots: chromosome-wide (900x400), peak marked with red dashed line"))
     validation_log <- c(validation_log, paste("✓ Effects plots: ±", HALF_WIN_MB, "Mb window around peak (900x500), windowed approach eliminates marker instability"))
+    validation_log <- c(validation_log, paste("✓ Effects plots: both scan1coef (*_coef_effects.png) and scan1blup (*_blup_effects.png) per group"))
     validation_log <- c(validation_log, paste("✓ Interactive model: plots saved in chr*/QTL_subdir/ (lod.png + {group}_effects.png)"))
     validation_log <- c(validation_log, paste("✓ Additive model: plots saved flat as chr*/basename_{lod,effects}.png"))
     validation_log <- c(validation_log, paste("✓ File names use Mb position of QTL peak"))

@@ -1,6 +1,6 @@
 process CLASSIFY_CIS_TRANS_EQTLS {
     tag "Classifying cis vs trans eQTLs"
-    publishDir "${params.outdir}/09_eqtl_classification", mode: 'copy'
+    publishDir "${params.outdir}/00_analyses", mode: 'copy'
 
     container "file:///${projectDir}/singularity_cache/dpbudke-qtl2-pipeline-latest.img"
 

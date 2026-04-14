@@ -182,6 +182,7 @@ include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.n
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
+include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
 
 /*
 ========================================================================================
@@ -369,6 +370,19 @@ workflow {
             ch_study_prefix
         )
 
+        // eQTL CLASSIFICATION: Classify cis vs trans eQTLs (eQTL study type only)
+        if (params.study_type == 'eQTL') {
+            log.info "Running eQTL cis/trans classification (study_type = eQTL)"
+            CLASSIFY_CIS_TRANS_EQTLS(
+                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                Channel.fromPath(params.gtf_file),
+                CHUNKED_PERMUTATION_TESTING.out.filtered_cross2
+            )
+            CLASSIFY_CIS_TRANS_EQTLS.out.summary.view { "eQTL classification summary: $it" }
+        } else {
+            log.info "Skipping eQTL classification (study_type = ${params.study_type})"
+        }
+
         // MODULE 9: QTL Visualizations
         // NOTE: This module generates individual PNG plots for significant QTLs
         log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
@@ -386,23 +400,19 @@ workflow {
         // Display results for Module 9
         VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
 
-        // MODULE 10: TIMBR Allelic Series Analysis (opt-in, requires rebuilt container)
-        if (params.run_timbr) {
-            TIMBR_ANALYSIS(
-                CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
-                PREPARE_GENOME_SCAN_SETUP.out.genoprob,
-                PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
-                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
-                ch_study_prefix,
-                Channel.value(params.timbr_sig_level),
-                Channel.value(params.timbr_qtls_per_batch),
-                Channel.value(params.timbr_samples)
-            )
-            TIMBR_ANALYSIS.out.master_summary.view { "TIMBR master summary: $it" }
-            TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
-        } else {
-            log.info "Skipping TIMBR (--run_timbr not set)"
-        }
+        // MODULE 10: TIMBR Allelic Series Analysis
+        TIMBR_ANALYSIS(
+            CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
+            PREPARE_GENOME_SCAN_SETUP.out.genoprob,
+            PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
+            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            ch_study_prefix,
+            Channel.value(params.timbr_sig_level),
+            Channel.value(params.timbr_qtls_per_batch),
+            Channel.value(params.timbr_samples)
+        )
+        TIMBR_ANALYSIS.out.master_summary.view { "TIMBR master summary: $it" }
+        TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
 
         // Display results for Modules 5-8
         PREPARE_GENOME_SCAN_SETUP.out.setup_report.view { "Genome scan prep report: $it" }

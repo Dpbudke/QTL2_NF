@@ -60,7 +60,7 @@ def helpMessage() {
                             permutation     - Start from permutation testing
                             significant_qtls - Start from QTL identification
                             visualize       - Start from QTL visualization
-                            timbr           - Start from TIMBR allelic series analysis (requires --run_timbr)
+                            timbr           - Start from TIMBR allelic series analysis
 
     Other Arguments:
         --finalreport_files  Path to GeneSeek FinalReport file(s)
@@ -193,6 +193,7 @@ include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permu
 include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
+include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
 
 /*
 ========================================================================================
@@ -583,6 +584,19 @@ workflow {
             ch_significant_qtls = Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs"))
         }
 
+        // eQTL CLASSIFICATION: Classify cis vs trans eQTLs (eQTL study type only)
+        if (params.study_type == 'eQTL') {
+            log.info "Running eQTL cis/trans classification (study_type = eQTL)"
+            CLASSIFY_CIS_TRANS_EQTLS(
+                ch_significant_qtls,
+                Channel.fromPath(params.gtf_file),
+                ch_filtered_cross2
+            )
+            CLASSIFY_CIS_TRANS_EQTLS.out.summary.view { "eQTL classification summary: $it" }
+        } else {
+            log.info "Skipping eQTL classification (study_type = ${params.study_type})"
+        }
+
         // MODULE 9: QTL Visualizations
         // NOTE: This module generates individual PNG plots for significant QTLs
         if (shouldRunStep('visualize', params.resume_from)) {
@@ -603,8 +617,8 @@ workflow {
             log.info "Skipping QTL visualization - will resume from this step if needed"
         }
 
-        // MODULE 10: TIMBR Allelic Series Analysis (opt-in, requires rebuilt container)
-        if (params.run_timbr && shouldRunStep('timbr', params.resume_from)) {
+        // MODULE 10: TIMBR Allelic Series Analysis
+        if (shouldRunStep('timbr', params.resume_from)) {
             // Load significant QTLs from file if resuming from timbr
             def ch_sig_qtls_timbr = (params.resume_from == 'timbr')
                 ? Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs for TIMBR"))
@@ -622,8 +636,6 @@ workflow {
             )
             TIMBR_ANALYSIS.out.master_summary.view { "TIMBR master summary: $it" }
             TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
-        } else if (!params.run_timbr) {
-            log.info "Skipping TIMBR (--run_timbr not set)"
         }
 
     } else {

@@ -76,7 +76,7 @@ workflow.onComplete {
     ========================================
     Pipeline completed!
     ========================================
-    Results directory: ${params.outdir}/09_eqtl_classification
+    Results directory: ${params.outdir}/00_analyses
 
     Output files:
       - eqtl_cis_trans_classification.csv  : Full classification results

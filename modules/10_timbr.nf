@@ -4,8 +4,7 @@
 
 process TIMBR_SETUP {
     tag "TIMBR setup for ${prefix} (sig_level: ${sig_level})"
-    publishDir "${params.outdir}/10_timbr", mode: 'copy',
-        saveAs: { fn -> fn.endsWith("_timbr_qtls.csv") || fn.endsWith("_timbr_setup_log.txt") ? fn : null }
+    publishDir "${params.outdir}/10_timbr", mode: 'copy'
 
     input:
     path(cross2_file)
@@ -19,7 +18,7 @@ process TIMBR_SETUP {
     path("${prefix}_timbr_batch_map.tsv"), emit: batch_file
     path("${prefix}_addcovar.rds"),        emit: addcovar_rds
     path("${prefix}_timbr_setup_log.txt"), emit: setup_log
-    stdout,                                emit: batch_ids
+    path("batch_ids.txt"),                 emit: batch_ids
 
     script:
     """
@@ -107,15 +106,15 @@ process TIMBR_SETUP {
     setup_log <- c(setup_log, paste("✓ Addcovar RDS:", "${prefix}_addcovar.rds"))
     writeLines(setup_log, "${prefix}_timbr_setup_log.txt")
 
-    # Emit batch IDs to stdout (one per line) for channel splitting
-    cat(paste(1:n_batches, collapse = "\\n"), "\\n")
+    # Write batch IDs to file (one per line) for channel splitting
+    writeLines(as.character(1:n_batches), "batch_ids.txt")
     """
 }
 
 
 process TIMBR_BATCH {
     tag "TIMBR batch ${batch_id} for ${prefix}"
-    publishDir "${params.outdir}/10_timbr/batches", mode: 'copy'
+    publishDir "${params.outdir}/10_timbr", mode: 'copy'
 
     input:
     val(batch_id)
@@ -131,8 +130,8 @@ process TIMBR_BATCH {
     output:
     path("${prefix}_timbr_batch${batch_id}_summary.csv"), emit: batch_summary
     path("${prefix}_timbr_batch${batch_id}_log.txt"),     emit: batch_log
-    path("timbr_plots_batch${batch_id}/*.png"),           emit: timbr_plots, optional: true
-    path("timbr_rds_batch${batch_id}/*.rds"),             emit: timbr_rds,   optional: true
+    path("chr*/*/plots/*.png"),                           emit: timbr_plots, optional: true
+    path("chr*/*/*.rds"),                                 emit: timbr_rds,   optional: true
 
     script:
     """
@@ -141,6 +140,7 @@ process TIMBR_BATCH {
     suppressPackageStartupMessages({
         library(qtl2)
         library(TIMBR)
+        library(ape)
     })
 
     set.seed(${batch_id} * 12345)
@@ -156,6 +156,7 @@ process TIMBR_BATCH {
     genetic_map <- readRDS("${genetic_map_file}")
     cross2      <- readRDS("${cross2_file}")
     addcovar    <- readRDS("${addcovar_file}")   # NULL if no covariates
+    pmap        <- cross2\$pmap                  # physical map (Mb), for cM→Mb lookup
 
     # Load batch-specific QTLs
     all_qtls  <- read.csv("${filtered_qtls_file}", stringsAsFactors = FALSE)
@@ -165,16 +166,19 @@ process TIMBR_BATCH {
 
     batch_log <- c(batch_log, paste("✓ QTLs in this batch:", nrow(this_batch)))
 
-    # Create output directories
-    dir.create("timbr_plots_batch${batch_id}", showWarnings = FALSE)
-    dir.create("timbr_rds_batch${batch_id}",   showWarnings = FALSE)
+    # Output dirs are created per-QTL inside the loop (chr-specific structure)
 
-    # ── CRP prior (computed once, reused for all QTLs in batch) ───────────────
+    # ── Tree-informed prior (DO/CC founder phylogeny, tip labels = qtl2 order) ─
+    # A=A/J  B=C57BL/6J  C=129S1  D=NOD  E=NZO  F=CAST  G=PWK  H=WSB
+    # Tree from Crouse et al. 2020 / TIMBR mcv.data example
+    do_tree <- ape::read.tree(text = "((B:0.05537190085,(E:0.01310357241,D:0.01310357241):0.04226832844):1.227652821,((F:0.4288873004,((C:0.03940317437,A:0.03940317437):0.03135662222,H:0.07075979659):0.3581275038):0.200533186,G:0.6294204864):0.6536042357);")
     hp      <- TIMBR::calc.concentration.prior(8, 0.05, 0.01)
-    prior.M <- list(model.type        = "crp",
+    prior.M <- list(model.type        = "tree",
+                    tree              = do_tree,
                     prior.alpha.type  = "gamma",
                     prior.alpha.shape = hp[1],
-                    prior.alpha.rate  = hp[2])
+                    prior.alpha.rate  = hp[2],
+                    hash.names        = TRUE)
 
     # ── Identify common samples across genoprob, phenotype, and addcovar ──────
     geno_samples  <- rownames(genoprob[[1]])
@@ -199,20 +203,21 @@ process TIMBR_BATCH {
         cat(sprintf("  [%d/%d] %s  chr%s  %.2f cM\\n", i, nrow(this_batch), pheno_id, chr, pos_cM))
 
         result_row <- data.frame(
-            prefix              = "${prefix}",
-            lodcolumn           = pheno_id,
-            chr                 = chr,
-            pos                 = pos_cM,
-            lod                 = row\$lod,
-            significance_level  = row\$significance_level,
-            nearest_marker      = NA_character_,
-            ln_BF               = NA_real_,
+            prefix               = "${prefix}",
+            lodcolumn            = pheno_id,
+            chr                  = chr,
+            pos                  = pos_cM,
+            peak_Mb              = NA_real_,
+            lod                  = row\$lod,
+            significance_level   = row\$significance_level,
+            nearest_marker       = NA_character_,
+            ln_BF                = NA_real_,
             n_functional_alleles = NA_integer_,
-            top_series_pattern  = NA_character_,
-            top_series_prob     = NA_real_,
-            n_samples_used      = NA_integer_,
-            status              = "pending",
-            stringsAsFactors    = FALSE
+            top_series_pattern   = NA_character_,
+            top_series_prob      = NA_real_,
+            n_samples_used       = NA_integer_,
+            status               = "pending",
+            stringsAsFactors     = FALSE
         )
 
         tryCatch({
@@ -220,6 +225,15 @@ process TIMBR_BATCH {
             if (!chr %in% names(genetic_map)) stop(paste("Chr", chr, "not in genetic_map"))
             gmap_chr    <- genetic_map[[chr]]
             nearest_mk  <- names(which.min(abs(gmap_chr - pos_cM)))
+
+            # ── Convert genetic position (cM) to physical position (Mb) ───
+            if (!chr %in% names(pmap)) stop(paste("Chr", chr, "not in pmap"))
+            peak_Mb   <- round(pmap[[chr]][nearest_mk], 2)
+            qtl_label <- paste0(safe_id, "_chr", chr, "_", peak_Mb, "Mb")
+            chr_dir   <- paste0("chr", chr)
+            qtl_dir   <- file.path(chr_dir, qtl_label)
+            plots_dir <- file.path(qtl_dir, "plots")
+            dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 
             # ── Extract P matrix [individuals x 36 diplotype states] ───────
             if (!chr %in% names(genoprob)) stop(paste("Chr", chr, "not in genoprob"))
@@ -250,34 +264,137 @@ process TIMBR_BATCH {
             prior.D\$P <- prior.D\$P[valid, ]
             if (!is.null(Z)) Z <- Z[valid, , drop = FALSE]
 
+            # ── Residualize phenotype against covariates ───────────────────
+            # Passing Z directly to TIMBR() can cause positive-definite errors;
+            # residualizing first is the standard workaround.
+            if (!is.null(Z)) {
+                fit <- lm(y ~ Z)
+                y   <- residuals(fit)
+            }
+
             # ── Run TIMBR ─────────────────────────────────────────────────
             timbr_result <- TIMBR::TIMBR(y, prior.D, prior.M,
-                                          Z       = Z,
-                                          samples = ${timbr_samples},
+                                          Z         = NULL,
+                                          samples   = ${timbr_samples},
                                           calc.lnBF = TRUE)
 
             # ── Extract summary statistics ─────────────────────────────────
             # MAP allelic series: the pattern with highest posterior probability
-            map_pattern      <- names(which.max(timbr_result\$p.M.given.y))
-            map_prob         <- max(timbr_result\$p.M.given.y)
-            n_func_alleles   <- length(unique(as.integer(strsplit(map_pattern, ",")[[1]])))
+            map_pattern    <- names(which.max(timbr_result\$p.M.given.y))
+            map_prob       <- max(timbr_result\$p.M.given.y)
+            n_func_alleles <- length(unique(as.integer(strsplit(map_pattern, ",")[[1]])))
 
-            # ── Save RDS and plot ──────────────────────────────────────────
-            rds_fname  <- file.path("timbr_rds_batch${batch_id}",
-                                     paste0(safe_id, "_chr", chr, "_", round(pos_cM, 1), "cM.rds"))
-            plot_fname <- file.path("timbr_plots_batch${batch_id}",
-                                     paste0(safe_id, "_chr", chr, "_", round(pos_cM, 1), "cM.png"))
-
+            # ── Save RDS ───────────────────────────────────────────────────
+            rds_fname <- file.path(qtl_dir, paste0(qtl_label, ".rds"))
             saveRDS(timbr_result, rds_fname)
 
-            png(plot_fname, width = 800, height = 600)
-            TIMBR::TIMBR.plot.haplotypes(timbr_result,
-                                          main = paste0(pheno_id, "  chr", chr, "  ", round(pos_cM, 1), " cM"))
-            dev.off()
+            # ── Plot title base ────────────────────────────────────────────
+            plot_title <- paste0(pheno_id, "  chr", chr, "  ", peak_Mb, " Mb")
+
+            # ── Plot 1: Posterior haplotype effects ────────────────────────
+            tryCatch({
+                png(file.path(plots_dir, "01_haplotype_effects.png"), width = 960, height = 480)
+                TIMBR::TIMBR.plot.haplotypes(timbr_result)
+                title(main = plot_title)
+                dev.off()
+            }, error = function(e) { try(dev.off(), silent=TRUE); cat("  Plot 1 failed:", conditionMessage(e), "\\n") })
+
+            # ── Plot 2: Posterior distribution of number of functional alleles
+            tryCatch({
+                n_alleles    <- sapply(names(timbr_result\$p.M.given.y),
+                                       function(x) max(as.numeric(unlist(strsplit(x, ",")))) + 1)
+                allele_probs <- tapply(timbr_result\$p.M.given.y, n_alleles, sum)
+                png(file.path(plots_dir, "02_n_alleles_distribution.png"), width = 600, height = 500)
+                barplot(allele_probs,
+                        xlab = "Number of functional alleles",
+                        ylab = "Posterior probability",
+                        main = plot_title,
+                        col  = "steelblue")
+                dev.off()
+            }, error = function(e) { try(dev.off(), silent=TRUE); cat("  Plot 2 failed:", conditionMessage(e), "\\n") })
+
+            # ── Plot 3: Top 10 posterior allelic series ────────────────────
+            tryCatch({
+                top_n   <- min(10, length(timbr_result\$p.M.given.y))
+                top_ser <- head(timbr_result\$p.M.given.y, top_n)
+                png(file.path(plots_dir, "03_top_allelic_series.png"), width = 800, height = 500)
+                barplot(rev(top_ser), horiz = TRUE, las = 1, cex.names = 0.8,
+                        xlab = "Posterior probability",
+                        ylab = "Allelic series",
+                        main = plot_title,
+                        col  = "steelblue")
+                dev.off()
+            }, error = function(e) { try(dev.off(), silent=TRUE); cat("  Plot 3 failed:", conditionMessage(e), "\\n") })
+
+            # ── Plot 4: TIMBR allelic series vs qtl2 founder effects ───────
+            # Compares TIMBR posterior haplotype effects (colored by MAP allelic
+            # series) against qtl2-style regression-on-probabilities (ROP) effects.
+            # Both use the same residualized phenotype and haplotype dosage matrix.
+            tryCatch({
+                founder_names <- c("A/J", "C57BL/6J", "129S1", "NOD", "NZO", "CAST", "PWK", "WSB")
+
+                # ── TIMBR posterior mean and 95% CI ──────────────────────────
+                timbr_means <- colMeans(timbr_result\$post.hap.effects)
+                timbr_lo    <- apply(timbr_result\$post.hap.effects, 2, quantile, 0.025)
+                timbr_hi    <- apply(timbr_result\$post.hap.effects, 2, quantile, 0.975)
+                # Centre around mean effect
+                timbr_means <- timbr_means - mean(timbr_means)
+                timbr_lo    <- timbr_lo    - mean(colMeans(timbr_result\$post.hap.effects))
+                timbr_hi    <- timbr_hi    - mean(colMeans(timbr_result\$post.hap.effects))
+
+                # ── qtl2 ROP founder effects via regression on dosages ────────
+                # H = P %*% A: [n_valid x 8] expected haplotype dosages.
+                # Rows of H sum to 1, so we omit the intercept (y is already
+                # residualized / roughly zero-mean) to avoid perfect collinearity.
+                H <- prior.D\$P %*% prior.D\$A
+                colnames(H) <- founder_names
+                fit_rop  <- lm(y ~ H - 1)
+                rop_eff  <- coef(fit_rop)
+                rop_se   <- summary(fit_rop)\$coefficients[, "Std. Error"]
+                rop_eff  <- rop_eff - mean(rop_eff, na.rm = TRUE)   # centre
+
+                # ── MAP allelic series colours (one colour per allele group) ─
+                series_idx  <- as.integer(strsplit(map_pattern, ",")[[1]]) + 1L
+                n_groups    <- max(series_idx)
+                group_cols  <- rainbow(n_groups, s = 0.8, v = 0.85)
+                founder_cols <- group_cols[series_idx]
+
+                # ── Plot ──────────────────────────────────────────────────────
+                png(file.path(plots_dir, "04_allelic_series_vs_founder_effects.png"),
+                    width = 1000, height = 520)
+                op <- par(mfrow = c(1, 2), mar = c(7, 4, 4, 1), oma = c(0, 0, 3, 0))
+
+                ylim_all <- range(c(timbr_lo, timbr_hi,
+                                    rop_eff - 2*rop_se, rop_eff + 2*rop_se), na.rm = TRUE)
+
+                # Panel A: TIMBR posterior effects
+                bp <- barplot(timbr_means, names.arg = founder_names,
+                              col = founder_cols, las = 2,
+                              ylab = "Effect (centred)", ylim = ylim_all,
+                              main = "TIMBR posterior effects")
+                arrows(bp, timbr_lo, bp, timbr_hi,
+                       angle = 90, code = 3, length = 0.05, lwd = 1.5)
+                abline(h = 0, lty = 2, col = "grey50")
+
+                # Panel B: qtl2 ROP founder effects
+                bp2 <- barplot(rop_eff, names.arg = founder_names,
+                               col = founder_cols, las = 2,
+                               ylab = "Effect (centred)", ylim = ylim_all,
+                               main = "qtl2 founder effects (ROP)")
+                arrows(bp2, rop_eff - 2*rop_se, bp2, rop_eff + 2*rop_se,
+                       angle = 90, code = 3, length = 0.05, lwd = 1.5)
+                abline(h = 0, lty = 2, col = "grey50")
+
+                # Shared title and allele-group legend
+                mtext(plot_title, outer = TRUE, cex = 1.1, font = 2)
+                par(op)
+                dev.off()
+            }, error = function(e) { try(dev.off(), silent=TRUE); cat("  Plot 4 failed:", conditionMessage(e), "\\n") })
 
             # ── Populate result row ────────────────────────────────────────
+            result_row\$peak_Mb              <- peak_Mb
             result_row\$nearest_marker       <- nearest_mk
-            result_row\$ln_BF                <- timbr_result\$ln.BF
+            result_row\$ln_BF               <- timbr_result\$ln.BF
             result_row\$n_functional_alleles <- n_func_alleles
             result_row\$top_series_pattern   <- map_pattern
             result_row\$top_series_prob      <- map_prob
@@ -330,7 +447,7 @@ process TIMBR_AGGREGATE {
     cat("Aggregating TIMBR batch results...\\n")
 
     # ── Read and combine all batch summary CSVs ───────────────────────────────
-    csv_files <- sort(list.files(".", pattern = "_timbr_batch[0-9]+_summary\\.csv\$", full.names = TRUE))
+    csv_files <- sort(list.files(".", pattern = "_timbr_batch[0-9]+_summary[.]csv\$", full.names = TRUE))
     cat("Found", length(csv_files), "batch summary files\\n")
 
     all_results <- lapply(csv_files, read.csv, stringsAsFactors = FALSE)
