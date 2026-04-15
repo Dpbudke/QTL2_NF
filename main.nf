@@ -221,10 +221,10 @@ workflow {
     if (params.finalreport_files) {
         ch_finalreport = Channel.fromPath(params.finalreport_files, checkIfExists: true)
                                 .collect()  // Collect all files into a single emission
-        ch_allele_codes = Channel.fromPath("${projectDir}/Data/GM_allelecodes.csv", checkIfExists: true)
-        ch_founder_genos = Channel.fromPath("${projectDir}/Data/GM_foundergeno*.csv", checkIfExists: true).collect()
-        ch_gmap_files = Channel.fromPath("${projectDir}/Data/GM_gmap*.csv", checkIfExists: true).collect()
-        ch_pmap_files = Channel.fromPath("${projectDir}/Data/GM_pmap*.csv", checkIfExists: true).collect()
+        ch_allele_codes = Channel.fromPath("${projectDir}/Data/GM/GM_allelecodes.csv", checkIfExists: true)
+        ch_founder_genos = Channel.fromPath("${projectDir}/Data/GM/GM_foundergeno*.csv", checkIfExists: true).collect()
+        ch_gmap_files = Channel.fromPath("${projectDir}/Data/GM/GM_gmap*.csv", checkIfExists: true).collect()
+        ch_pmap_files = Channel.fromPath("${projectDir}/Data/GM/GM_pmap*.csv", checkIfExists: true).collect()
 
         GENOTYPE_PROCESS(
             ch_finalreport,
