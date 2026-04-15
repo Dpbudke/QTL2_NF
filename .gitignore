@@ -1,4 +1,6 @@
-Data/
+Data/Mus_musculus.GRCm39.105.gtf.gz
+Data/QTL2_NF*
+Data/USDA*
 R_Data/
 test_results/
 nextflow_work/
@@ -14,3 +16,4 @@ Results_final
 results_ain76
 Temp/
 logs
+GBRS_development_map.txt

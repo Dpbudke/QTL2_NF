@@ -141,7 +141,11 @@ process TIMBR_BATCH {
         library(qtl2)
         library(TIMBR)
         library(ape)
+        library(parallel)
     })
+
+    n_cores <- ${task.cpus}
+    cat("Batch ${batch_id}: using", n_cores, "cores via mclapply\\n")
 
     set.seed(${batch_id} * 12345)
 
@@ -190,10 +194,8 @@ process TIMBR_BATCH {
     }
     batch_log <- c(batch_log, paste("✓ Common samples:", length(common_samples)))
 
-    # ── Results container ─────────────────────────────────────────────────────
-    results_list <- vector("list", nrow(this_batch))
-
-    for (i in seq_len(nrow(this_batch))) {
+    # ── Per-QTL function (called via mclapply) ────────────────────────────────
+    process_qtl <- function(i) {
         row       <- this_batch[i, ]
         pheno_id  <- row\$lodcolumn
         chr       <- as.character(row\$chr)
@@ -407,8 +409,11 @@ process TIMBR_BATCH {
             result_row\$status <<- msg
         })
 
-        results_list[[i]] <- result_row
+        result_row
     }
+
+    # ── Run in parallel ───────────────────────────────────────────────────────
+    results_list <- parallel::mclapply(seq_len(nrow(this_batch)), process_qtl, mc.cores = n_cores)
 
     # ── Write batch summary ───────────────────────────────────────────────────
     batch_summary <- do.call(rbind, results_list)

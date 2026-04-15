@@ -209,23 +209,43 @@ The module processes specially formatted CSV files with the following convention
 
 **Resources**: 4 CPUs, 16GB RAM, 30 minutes
 
-### Module 7: Simplified Batch Permutation Testing (`07_permutation_testing.nf`)
-**Purpose**: Efficient single-phenotype permutation testing with fork-based parallelism and intelligent pre-filtering
+### Module 7: Coordinator-Based Permutation Testing (`07_permutation_testing.nf`)
+**Purpose**: Reliable permutation testing for large phenotype sets using a coordinator architecture that survives long-running HPC jobs without depending on the Nextflow driver session remaining active
 
-**Key Functions**:
-- **Smart Pre-filtering**: Only processes phenotypes passing LOD threshold from Module 6 or regional filtering from Module 6b
-- **Simplified Batch Architecture**: 1 batch = 1 phenotype × 50 permutations = 1 SLURM job (20 batches per phenotype = 1,000 total permutations)
-- **Fork-Based Parallelism**: Uses scan1perm() with cores=48 and fork (NOT PSOCK) for efficient memory sharing on Linux
-- **Memory Optimization**: Alleleprob-based (2.1GB) instead of genoprob (9.3GB) for 4.4x memory reduction
-- **Real-Time Progress**: Individual batch completion enables live monitoring of permutation progress
-- **Automatic Resume**: Detects existing batch results and skips completed permutation jobs
-- **Filtered Cross2 Object**: Creates phenotype-filtered cross2 for downstream Module 8 analysis
-- **Multi-level Thresholds**: Calculates significance thresholds at 63%, 90%, 95%, 99% quantiles
-- **Comprehensive Aggregation**: Quilts together all batch results into final permutation matrix (1000 perms × N phenotypes)
+**Architecture**: `PERM_SETUP → PERM_COORDINATOR → PERM_AGGREGATE`
 
-**Efficiency Achievement**: LOD threshold of 7.0 typically reduces permutation workload by 70-90%; regional filtering can achieve 95-98% reduction
+The previous design submitted individual SLURM batch jobs directly through Nextflow's job manager. If the Nextflow driver process died (for example, when a VS Code session hit a 10-hour wall time), all job monitoring stopped mid-run. The coordinator architecture eliminates this failure mode.
 
-**Resources**: Setup (4 CPUs, 32GB, 10m), Batch Jobs (48 CPUs, 100GB, 1h each), Aggregation (4 CPUs, 32GB, 1h)
+**Process: PERM_SETUP**
+- Loads the full cross2 object and filters it to the phenotypes that passed the LOD threshold from Module 6 (or regional filtering from Module 6b)
+- Writes the filtered cross2 object and the phenotype list to the published output directory
+- Calculates and logs the full batch configuration: 200 permutations × 5 batches per phenotype = 1,000 total permutations per phenotype
+
+**Process: PERM_COORDINATOR**
+- A **single SLURM job with a 7-day wall time** (1 CPU, 4 GB) that runs without a container so it has access to host SLURM tools (`sbatch`, `sacct`)
+- Writes the shared R worker script (`perm_batch_worker.R`) to the published directory so all compute nodes can access it over the shared filesystem
+- Submits all permutation batch jobs directly via `sbatch` (48 CPUs, 200 GB, 2-hour wall time per batch job)
+- Each batch worker runs inside the Singularity container: `apptainer exec --bind /project:/project singularity_cache/dpbudke-qtl2-pipeline-latest.img`
+- Polls job status every 5 minutes via `sacct` and retries failed batches up to 2 times automatically
+- Has internal resume logic: skips any batch whose output file already exists and is non-empty
+- Writes a `COORDINATOR_COMPLETE` sentinel file when all batches finish, which triggers `PERM_AGGREGATE`
+- Because the coordinator is itself a 7-day SLURM job, it is completely independent of the Nextflow driver session; driver interruption does not stop the batch work
+
+**Process: PERM_AGGREGATE**
+- Triggered by the `COORDINATOR_COMPLETE` sentinel file
+- Reads batch result files directly from the published batch directory on the shared filesystem rather than staging them as Nextflow inputs (avoids staging thousands of individual files)
+- Combines all batch permutation matrices into a single 1,000-permutation-per-phenotype result matrix
+- Calculates multi-level empirical significance thresholds (63%, 90%, 95%, 99% quantiles)
+- Writes the list of phenotypes passing the LOD threshold at the 99% level for use in Module 8
+
+**Key Properties**:
+- **Fork-based parallelism**: Each batch worker uses `scan1perm()` with `cores=48` and fork (not PSOCK), which is efficient on Linux
+- **Automatic resume**: The coordinator skips batches whose output files already exist; re-submitting the coordinator job after an interruption safely continues from where work left off
+- **Error handling**: Batches in FAILED, TIMEOUT, CANCELLED, NODE_FAIL, or OUT_OF_MEMORY states are retried up to 2 times; permanently failed batches are logged and the coordinator exits with a non-zero status
+
+**Efficiency Achievement**: LOD threshold of 7.0 typically reduces the permutation phenotype set by 70-90% relative to the full scan; regional filtering (Module 6b) can achieve 95-98% reduction
+
+**Resources**: Setup (4 CPUs, 32 GB, 10 min), Coordinator (1 CPU, 4 GB, 7-day wall time), Batch Workers (48 CPUs, 200 GB, 2 h each), Aggregation (4 CPUs, 32 GB, 1 h)
 
 ### Module 8: Significant QTL Identification (`08_identify_significant_qtls.nf`)
 **Purpose**: Statistical QTL calling using empirical permutation thresholds with multi-level significance classification
@@ -548,15 +568,22 @@ nextflow run main_resume.nf \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
-# Resume from HPC array genome scanning (most common restart point)
+# Resume from HPC batch genome scanning (most common restart point)
 nextflow run main_resume.nf \
-  --resume_from qtl_analysis \
+  --resume_from genome_scan \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
 # Resume from permutation testing (after scan completion)
+# NOTE: For permutation runs, prefer submitting via sbatch wrapper — see "Running Permutation Testing" below
 nextflow run main_resume.nf \
   --resume_from permutation \
+  --study_prefix DOchln \
+  --lod_threshold 7.0
+
+# Resume only the PERM_AGGREGATE step after all coordinator batches have finished
+nextflow run main_resume.nf \
+  --resume_from perm_aggregate \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
@@ -566,18 +593,83 @@ nextflow run main_resume.nf \
   --study_prefix DOchln
 ```
 
-**Resume Options (Module Numbers)**:
--  `phenotype` - Start from phenotype processing and validation
--  `genotype` - Start from genotype processing and chromosome file generation
--  `control` - Start from control file generation and metadata creation
--  `cross2` - Start from cross2 object creation and validation
--  `prepare_scan` - Start from genome scan preparation (genotype probabilities)
--  `qtl_analysis` - Start from HPC array genome scanning and peak detection
--  `permutation` - Start from permutation testing and significance thresholds
--  `significant_qtls` - Start from significant QTL identification and summarization
--  `visualize` - Start from QTL visualization (plot_coefCC for 99% significant QTLs)
+**Resume Options**:
+- `phenotype` - Start from phenotype processing and validation
+- `genotype` - Start from genotype processing and chromosome file generation
+- `control` - Start from control file generation and metadata creation
+- `cross2` - Start from cross2 object creation and validation
+- `prepare_scan` - Start from genome scan preparation (genotype probabilities)
+- `genome_scan` - Start from HPC batch genome scanning and peak detection
+- `regional_filter` - Start from regional QTL filtering (requires `--qtl_region`)
+- `permutation` - Start from permutation testing (runs full PERM_SETUP → PERM_COORDINATOR → PERM_AGGREGATE)
+- `perm_aggregate` - Run only PERM_AGGREGATE, reading completed batch files from the published batch directory; use this when the coordinator has finished but the aggregation step failed or was not yet run
+- `significant_qtls` - Start from significant QTL identification and summarization
+- `visualize` - Start from QTL visualization (plot_coefCC for 99% significant QTLs)
+- `timbr` - Start from TIMBR allelic series analysis
 
-**Perfect Module Alignment**: Resume capability matches the numbered module structure exactly, enabling intuitive restart from any processing step with full compatibility.
+**Note on `perm_aggregate`**: This resume case passes the phenotype list file as a trigger rather than staging thousands of batch files as Nextflow inputs. `PERM_AGGREGATE` reads batch files directly from the published `07_permutation_testing/batches/` directory on the shared filesystem.
+
+### Running Permutation Testing
+
+Permutation runs are long-lived (hours to days) and require both the Nextflow driver and the `PERM_COORDINATOR` job to remain alive. Because interactive VS Code sessions have a 10-hour wall time limit, the recommended approach is to submit the Nextflow driver itself as a 7-day SLURM job using a wrapper script. This creates two independent layers of session-independence: the driver is a SLURM job, and the coordinator it spawns is also a SLURM job.
+
+**Recommended: Submit via sbatch wrapper**
+
+Pre-made wrapper scripts live in `Temp/`. To launch a permutation resume for a specific analysis:
+
+```bash
+# Submit the AIN76_only permutation resume as a 7-day SLURM job
+sbatch Temp/resume_ain76_perm.sh
+
+# Check submission status
+squeue -u dawson.budke --name=nf_ain76_perm_resume
+
+# Tail the driver log to monitor Nextflow progress
+tail -f Temp/ain76_permutation_resume.log
+```
+
+The wrapper script (`Temp/resume_ain76_perm.sh`) runs `nextflow run main_resume.nf --resume_from permutation ...` inside a 7-day SLURM job. Once Nextflow dispatches `PERM_COORDINATOR`, the coordinator manages all batch submissions independently. If the driver job dies for any reason, the coordinator continues running and all in-progress batch work is preserved.
+
+**Creating a wrapper for a new analysis type**
+
+Model new wrapper scripts on `Temp/resume_ain76_perm.sh`. The key SLURM directives to include are:
+
+```bash
+#SBATCH --time=7-00:00:00      # Match coordinator wall time
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --output=Temp/{analysis}_perm.log
+#SBATCH --open-mode=append     # Append so log survives driver restarts
+```
+
+**Monitoring coordinator progress**
+
+The coordinator writes a detailed progress log to the published output directory:
+
+```bash
+# Live coordinator log (shows submissions, retries, and 5-minute status polls)
+tail -f Results_final/eQTL/AIN76_only/07_permutation_testing/{prefix}_coordinator_log.txt
+
+# Per-batch SLURM job logs
+ls Results_final/eQTL/AIN76_only/07_permutation_testing/coordinator_job_logs/
+
+# Check SLURM queue for active batch workers
+squeue -u dawson.budke | grep perm_
+```
+
+**Aggregating after coordinator completion**
+
+When the coordinator finishes, it writes a `COORDINATOR_COMPLETE` sentinel file, which automatically triggers `PERM_AGGREGATE` within the same Nextflow run. If for any reason aggregation needs to be run separately after the coordinator has already finished:
+
+```bash
+nextflow run main_resume.nf \
+  --resume_from perm_aggregate \
+  --study_prefix DOChln \
+  --analysis_type AIN76_only \
+  --study_type eQTL \
+  --lod_threshold 7.0 \
+  -profile standard
+```
 
 ### Development and Testing
 
@@ -674,18 +766,23 @@ results/
 │   ├── {prefix}_regional_filtered_phenotypes.txt  # Phenotypes in target region(s)
 │   ├── {prefix}_filtered_peaks.csv          # Peaks with gene location annotations
 │   └── {prefix}_regional_filtering_report.txt  # Filtering statistics and workload reduction
-├── 07_permutation_testing/          # Simplified batch permutation testing
-│   ├── batches/                     # Individual batch permutation results
-│   │   ├── {prefix}_phenotype1_batch_1.rds   # Permutation batch 1 for phenotype 1
-│   │   ├── {prefix}_phenotype1_batch_2.rds   # Permutation batch 2 for phenotype 1
-│   │   └── ...                               # Additional batch results (20 batches × N phenotypes)
-│   ├── {prefix}_filtered_cross2.rds         # Phenotype-filtered cross2 object
-│   ├── {prefix}_phenotype_list.txt          # List of phenotypes for permutation
-│   ├── {prefix}_setup_log.txt               # Permutation setup log
-│   ├── {prefix}_fullPerm.rds                # Complete permutation matrix (1000 × N phenotypes)
-│   ├── {prefix}_permThresh.rds              # Multi-level significance thresholds (63%, 90%, 95%, 99%)
+├── 07_permutation_testing/          # Coordinator-based permutation testing
+│   ├── batches/                     # Individual batch permutation results (written by batch workers)
+│   │   ├── {prefix}_{phenotype}_batch_1.rds  # Permutation batch 1 for each phenotype
+│   │   ├── {prefix}_{phenotype}_batch_2.rds  # Permutation batch 2 for each phenotype
+│   │   └── ...                               # 5 batches × N phenotypes (200 perms each = 1000 total)
+│   ├── coordinator_job_logs/        # Per-batch SLURM job stdout/stderr logs
+│   │   └── {prefix}_{phenotype}_b{N}.log     # Log from each individual batch worker job
+│   ├── perm_batch_worker.R          # Shared R worker script written by coordinator
+│   ├── {prefix}_coordinator_log.txt # Coordinator progress log (submissions, retries, completion)
+│   ├── COORDINATOR_COMPLETE         # Sentinel file written when all batches finish
+│   ├── {prefix}_filtered_cross2.rds # Phenotype-filtered cross2 object (from PERM_SETUP)
+│   ├── {prefix}_phenotype_list.txt  # List of phenotypes submitted for permutation
+│   ├── {prefix}_setup_log.txt       # Permutation setup log
+│   ├── {prefix}_fullPerm.rds        # Complete permutation matrix (1000 perms × N phenotypes)
+│   ├── {prefix}_permThresh.rds      # Multi-level significance thresholds (63%, 90%, 95%, 99%)
 │   ├── {prefix}_filtered_phenotypes_lod{threshold}.txt  # Phenotypes passing final threshold
-│   └── {prefix}_aggregation_log.txt         # Permutation aggregation log
+│   └── {prefix}_aggregation_log.txt # Permutation aggregation log
 ├── 08_significant_qtls/             # Final QTL identification and analysis
 │   ├── {prefix}_significant_qtls.csv    # Comprehensive significant QTL list
 │   ├── {prefix}_qtl_summary.txt     # Summary statistics and distributions

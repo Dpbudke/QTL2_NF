@@ -533,14 +533,17 @@ workflow {
             ch_filtered_cross2 = CHUNKED_PERMUTATION_TESTING.out.filtered_cross2
 
         } else if (params.resume_from == 'perm_aggregate') {
-            log.info "Running only PERM_AGGREGATE - using existing batch results"
+            log.info "Running only PERM_AGGREGATE - all batches assumed complete"
 
-            // Collect batch result files from the published batches directory
-            ch_batch_results = Channel.fromPath("${input_dir}/07_permutation_testing/batches/${params.study_prefix}_*_batch_*.rds")
-                .collect()
+            // Pass the phenotype list as the trigger (confirms PERM_SETUP ran and
+            // batches exist). PERM_AGGREGATE now reads batch files directly from
+            // the published batch directory rather than staging them as inputs.
+            ch_agg_trigger = Channel.fromPath(
+                checkFileExists("${input_dir}/07_permutation_testing/${params.study_prefix}_phenotype_list.txt",
+                                "phenotype list"))
 
             PERM_AGGREGATE(
-                ch_batch_results,
+                ch_agg_trigger,
                 ch_study_prefix,
                 Channel.value(params.lod_threshold)
             )
