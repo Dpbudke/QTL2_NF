@@ -9,6 +9,35 @@ A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed 
 
 QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and genotype data to identify quantitative trait loci (QTLs) with rigorous statistical significance testing. The pipeline is optimized for large-scale datasets and provides interactive visualization through QTL Viewer integration. Building upon methodologies from the DO_Pipe project (https://github.com/exsquire/DO_pipe), this pipeline implements automated workflows for multiparental population analysis with enhanced scalability and reproducibility.
 
+## Getting Started / Post-Clone Setup
+
+After cloning the repository, one setup step is required before running the pipeline.
+
+**1. Clone the repository**
+```bash
+git clone <repo-url> QTL2_NF
+cd QTL2_NF
+```
+
+**2. Pull the container image (required)**
+
+The `singularity_cache/` directory is gitignored because the `.img` file is a large binary. Create the directory and pull the image manually:
+```bash
+mkdir singularity_cache
+apptainer pull singularity_cache/dpbudke-qtl2-pipeline-latest.img \
+    docker://dpbudke/qtl2-pipeline:latest
+```
+
+This is the only required setup step. No configuration changes are needed.
+
+**3. No path configuration required**
+
+All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable that automatically resolves to the directory containing `main.nf`. The pipeline works correctly regardless of what the cloned directory is named or where it lives on the filesystem.
+
+**Note on gitignored directories**: `nextflow_work/` (Nextflow work directory) and `singularity_cache/` (container image) are both gitignored and created locally. They are not tracked in version control.
+
+---
+
 ## Input Data Requirements
 
 ### Phenotype File Format
