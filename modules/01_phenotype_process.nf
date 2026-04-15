@@ -28,9 +28,6 @@ process PHENOTYPE_PROCESS {
         library(jsonlite)  # For parsing sample filter JSON
     })
     
-    # Source custom functions (now from /opt/bin in container)
-    source("/opt/bin/robustZmat.R") 
-    source("/opt/bin/covCheck.R")
     
     # Initialize validation report
     validation_log <- c()
@@ -371,60 +368,6 @@ process PHENOTYPE_PROCESS {
             validation_log <<- c(validation_log, "⚠ INFO: Skipping diagnostic plots for large phenotype dataset (>100 phenotypes)")
             validation_log <<- c(validation_log, "  This is typical for eQTL datasets to avoid memory/time constraints")
             validation_log <<- c(validation_log, "  Data validation and file processing completed successfully")
-        } else {
-            
-            # Plot 1 & 2 - Robust Z-score matrices
-            tryCatch({
-                # robustZmat function already loaded from /opt/bin
-                
-                # Full matrix plot
-                robustZmat(pheno_data,
-                           prefix = "${prefix}",
-                           path = './diagnostic_plots/',
-                           rowFont = 1,
-                           colFont = 10,
-                           margins = c(150,45),
-                           pdfWid = 150,
-                           pdfHei = 150)
-                
-                # Zoomed outlier plot
-                robustZmat(pheno_data,
-                           prefix = "${prefix}",
-                           path = './diagnostic_plots/',
-                           rowFont = 10,
-                           colFont = 20,
-                           zoom = TRUE,
-                           valSize = 20,
-                           margins = c(100,60))
-                
-                validation_log <<- c(validation_log, "✓ Generated robust Z-score diagnostic plots")
-                
-            }, error = function(e) {
-                if (grepl("no outliers", e\$message)) {
-                    validation_log <<- c(validation_log, "✓ No outliers detected in data (robust Z-score plots skipped)")
-                } else {
-                    validation_log <<- c(validation_log, paste("⚠ WARNING: Robust Z-score plots failed:", e\$message))
-                }
-            })
-            
-            # Plot 3 - Batch effect diagnostic  
-            tryCatch({
-                # covCheck function already loaded from /opt/bin
-                
-                covCheck(covar_data, pheno_data,
-                         prefix = "${prefix}",
-                         path = './diagnostic_plots/',
-                         pdfWid = 100,
-                         pdfHei = 100,
-                         margins = c(100,80),
-                         rowFont = 15, 
-                         colFont = 10)
-                
-                validation_log <<- c(validation_log, "✓ Generated batch effect diagnostic plots")
-                
-            }, error = function(e) {
-                validation_log <<- c(validation_log, paste("⚠ WARNING: Batch effect plots failed:", e\$message))
-            })
         }
         
     }, error = function(e) {
