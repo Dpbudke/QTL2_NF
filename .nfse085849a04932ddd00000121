@@ -1,0 +1,38 @@
+[33mNextflow 25.10.4 is available - Please consider updating your version to it(B[m
+N E X T F L O W  ~  version 25.04.6
+Launching `main_resume.nf` [dreamy_dubinsky] DSL2 - revision: 6e63ac212b
+Analysis type: AIN76_only (AIN76 diet subset)
+
+Auto-configured settings for AIN76_only:
+    outdir             : Results_final/eQTL/AIN76_only
+    resume_from        : permutation
+    sample_filter      : {"Diet": ["ain76a"]}
+    exclude_covariates : Diet
+    interactive_covar  : null (additive model)
+
+
+========================================
+ QTL2_NF Pipeline Started
+========================================
+study_prefix   : DOchln_ain76
+input_dir      : Results_final/eQTL/AIN76_only
+outdir         : Results_final/eQTL/AIN76_only
+resume_from    : permutation
+lod_threshold  : 7.0
+========================================
+
+Skipping PHENOTYPE_PROCESS - loading from existing files
+Skipping GENERATE_CONTROL_FILE - loading from existing files
+Skipping CREATE_CROSS2_OBJECT - loading from existing files
+Skipping GENOME_SCAN_BATCH - loading from existing files
+No regional filtering applied - using all LOD-filtered phenotypes
+Running CHUNKED_PERMUTATION_TESTING (DO_Pipe approach)
+WARN: Access to undefined parameter `perm_per_chunk` -- Initialise it to a default value eg. `params.perm_per_chunk = some_value`
+WARN: Access to undefined parameter `chunks_per_batch` -- Initialise it to a default value eg. `params.chunks_per_batch = some_value`
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: DO_MIXUP_QC
+[fb/4d5669] Submitted process > CHUNKED_PERMUTATION_TESTING:PERM_SETUP (Setting up permutation testing)
+Permutation setup log: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/fb/4d5669f8866fdd91bd518cf00a6dc3/DOchln_ain76_setup_log.txt
+[5c/ed1f46] Submitted process > CHUNKED_PERMUTATION_TESTING:PERM_COORDINATOR (Coordinating all permutation batches (7-day SLURM job))

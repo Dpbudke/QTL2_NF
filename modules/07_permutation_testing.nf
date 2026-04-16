@@ -274,25 +274,88 @@ RSCRIPT
     TOTAL_BATCHES=\$(( NUM_PHENOS * 5 ))
     log "Phenotypes: \${NUM_PHENOS}  |  Total batches: \${TOTAL_BATCHES}"
 
-    # ── Job tracking ─────────────────────────────────────────────────────────
-    declare -A JOB_IDS      # KEY -> slurm_job_id
-    declare -A JOB_RETRIES  # KEY -> retry_count
+    # ── Constants ────────────────────────────────────────────────────────────
+    MAX_CONCURRENT=200    # Max concurrent array tasks at once (%N in --array)
+    MAX_ARRAY_SIZE=10000  # Ceres MaxArraySize limit (scontrol show config)
+    MAX_RETRIES=2         # Max retry attempts per failed batch
 
+    # ── Paths ────────────────────────────────────────────────────────────────
+    STATUS_FILE="\${PERM_DIR}/COORDINATOR_STATUS.txt"
+    ARRAY_WORKER="\${PERM_DIR}/perm_array_worker.sh"
+
+    # ── Helper: check if a batch output file is complete ─────────────────────
     batch_done() {
-        local OUT_FILE="\$1"
-        [[ -f "\${OUT_FILE}" ]] && [[ \$(stat -c%s "\${OUT_FILE}" 2>/dev/null || echo 0) -gt 1000 ]]
+        local F="\$1"
+        [[ -f "\${F}" ]] && [[ \$(stat -c%s "\${F}" 2>/dev/null || echo 0) -gt 1000 ]]
     }
 
-    submit_batch() {
-        local PHENO="\$1" BATCH="\$2"
-        local KEY="\${PHENO}__b\${BATCH}"
-        local OUT_FILE="\${BATCH_DIR}/\${STUDY_PREFIX}_\${PHENO}_batch_\${BATCH}.rds"
-        local JOB_LOG="\${JOBS_LOG_DIR}/\${STUDY_PREFIX}_\${PHENO}_b\${BATCH}.log"
+    # ── Helper: count completed .rds files in batch dir (fast, one ls call) ──
+    count_done() {
+        ls "\${BATCH_DIR}"/*.rds 2>/dev/null | wc -l
+    }
 
-        if batch_done "\${OUT_FILE}"; then return 0; fi
+    # ── Helper: update COORDINATOR_STATUS.txt ────────────────────────────────
+    update_status_file() {
+        local DONE="\$1" RUNNING="\$2" QUEUED="\$3" UNSUBMITTED="\$4" FAILED="\$5"
+        local PCT=0
+        [[ \${TOTAL_BATCHES} -gt 0 ]] && PCT=\$(( DONE * 100 / TOTAL_BATCHES ))
+        cat > "\${STATUS_FILE}" <<STATUSEOF
+=== PERMUTATION COORDINATOR STATUS ===
+Updated:      \$(date)
+Progress:     \${DONE} / \${TOTAL_BATCHES} batches complete (\${PCT}%)
+------------------------------------------
+Running:      \${RUNNING} (executing on compute nodes)
+Queued:       \${QUEUED} (waiting in SLURM queue)
+Unsubmitted:  \${UNSUBMITTED} (pending future array waves)
+Perm failed:  \${FAILED} (exhausted retries)
+STATUSEOF
+    }
 
-        # Truncate job name to 63 chars (SLURM limit)
-        local JOB_NAME="perm_\${STUDY_PREFIX}_\${PHENO}_b\${BATCH}"
+    # ── Helper: get running/queued task counts for an array job ──────────────
+    get_array_counts() {
+        local JID="\$1"
+        local RUNNING=0 QUEUED=0
+        while IFS= read -r ST; do
+            case "\${ST}" in
+                R|CG) RUNNING=\$((RUNNING+1)) ;;
+                PD)   QUEUED=\$((QUEUED+1))   ;;
+            esac
+        done < <(squeue -j "\${JID}" -h --format="%t" 2>/dev/null)
+        echo "\${RUNNING} \${QUEUED}"
+    }
+
+    # ── Write the array worker script ─────────────────────────────────────────
+    # Each SLURM array task reads its PHENO/BATCH from the wave manifest using
+    # \$SLURM_ARRAY_TASK_ID, then runs perm_batch_worker.R via apptainer.
+    cat > "\${ARRAY_WORKER}" << 'ARRAYEOF'
+#!/bin/bash
+MANIFEST="\$1"
+SIF="\$2"
+WORKER="\$3"
+STUDY="\$4"
+PROJDIR="\$5"
+OUTDIR="\$6"
+
+PHENO=\$(awk -v id="\$SLURM_ARRAY_TASK_ID" '\$1==id{print \$2}' "\$MANIFEST")
+BATCH=\$(awk -v id="\$SLURM_ARRAY_TASK_ID" '\$1==id{print \$3}' "\$MANIFEST")
+
+if [[ -z "\$PHENO" || -z "\$BATCH" ]]; then
+    echo "ERROR: task \$SLURM_ARRAY_TASK_ID not found in \$MANIFEST" >&2
+    exit 1
+fi
+
+echo "Array task \$SLURM_ARRAY_TASK_ID -> \$PHENO batch \$BATCH"
+apptainer exec --bind /project:/project "\$SIF" Rscript "\$WORKER" "\$PHENO" "\$BATCH" "\$STUDY" "\$PROJDIR" "\$OUTDIR"
+ARRAYEOF
+    chmod +x "\${ARRAY_WORKER}"
+    log "Array worker written to: \${ARRAY_WORKER}"
+
+    # ── Helper: submit one array wave ─────────────────────────────────────────
+    # Args: wave_label manifest_file n_tasks
+    # Prints the SLURM array job ID on success, empty string on failure
+    submit_wave() {
+        local LABEL="\$1" MANIFEST="\$2" N="\$3"
+        local JOB_NAME="perm_\${STUDY_PREFIX}_\${LABEL}"
         JOB_NAME="\${JOB_NAME:0:63}"
 
         local JOB_ID
@@ -303,111 +366,116 @@ RSCRIPT
             --mem=200G \
             --time=2:00:00 \
             --job-name="\${JOB_NAME}" \
-            --output="\${JOB_LOG}" \
-            --wrap="apptainer exec --bind /project:/project \${SIF} Rscript \${WORKER_SCRIPT} '\${PHENO}' \${BATCH} '\${STUDY_PREFIX}' '\${PROJECT_DIR}' '\${OUTDIR}'" \
+            --output="\${JOBS_LOG_DIR}/\${STUDY_PREFIX}_\${LABEL}_%a.log" \
+            --array="1-\${N}%\${MAX_CONCURRENT}" \
+            --wrap="bash '\${ARRAY_WORKER}' '\${MANIFEST}' '\${SIF}' '\${WORKER_SCRIPT}' '\${STUDY_PREFIX}' '\${PROJECT_DIR}' '\${OUTDIR}'" \
             2>/dev/null | awk '{print \$NF}')
 
-        if [[ "\${JOB_ID}" =~ ^[0-9]+\$ ]]; then
-            JOB_IDS["\${KEY}"]="\${JOB_ID}"
-            log "  Submitted \${PHENO} batch \${BATCH} -> SLURM \${JOB_ID}"
-        else
-            log "  WARNING: sbatch failed for \${PHENO} batch \${BATCH}"
-        fi
+        [[ "\${JOB_ID}" =~ ^[0-9]+\$ ]] && echo "\${JOB_ID}" || echo ""
     }
 
-    # ── Initial submission pass ───────────────────────────────────────────────
-    log "--- Initial submission pass ---"
-    NEED_SUBMIT=0
+    # ── Build initial pending list ─────────────────────────────────────────────
+    log "--- Scanning for completed/pending batches ---"
+    PENDING=()
+    declare -A RETRY_COUNT
     ALREADY_DONE=0
+
     for PHENO in "\${PHENOTYPES[@]}"; do
         for BATCH in 1 2 3 4 5; do
-            OUT_FILE="\${BATCH_DIR}/\${STUDY_PREFIX}_\${PHENO}_batch_\${BATCH}.rds"
-            if batch_done "\${OUT_FILE}"; then
+            if batch_done "\${BATCH_DIR}/\${STUDY_PREFIX}_\${PHENO}_batch_\${BATCH}.rds"; then
                 ALREADY_DONE=\$((ALREADY_DONE+1))
             else
-                submit_batch "\${PHENO}" "\${BATCH}"
-                NEED_SUBMIT=\$((NEED_SUBMIT+1))
+                PENDING+=("\${PHENO} \${BATCH}")
             fi
         done
     done
-    log "Initial pass: \${ALREADY_DONE} already done, \${NEED_SUBMIT} submitted"
 
-    if [[ \${NEED_SUBMIT} -eq 0 ]]; then
-        log "All batches already complete — skipping monitor loop"
+    log "Scan: \${ALREADY_DONE} already done, \${#PENDING[@]} need submitting"
+
+    if [[ \${#PENDING[@]} -eq 0 ]]; then
+        log "All batches complete — exiting"
         touch COORDINATOR_COMPLETE
         exit 0
     fi
 
-    # ── Monitor loop (every 5 minutes) ───────────────────────────────────────
-    log "--- Starting monitor loop (5-min interval) ---"
-    while true; do
-        sleep 300
+    # ── Wave loop: submit PENDING in chunks of MAX_ARRAY_SIZE ─────────────────
+    # Each wave is one sbatch --array submission. After it drains, failures are
+    # retried in the next wave. Continues until PENDING is empty.
+    WAVE=0
+    PERM_FAILED=0
 
-        DONE=0 RUNNING=0 PENDING=0 PERM_FAILED=0
+    while [[ \${#PENDING[@]} -gt 0 ]]; do
+        WAVE=\$((WAVE+1))
+        N_PENDING=\${#PENDING[@]}
+        SLICE=\$(( N_PENDING < MAX_ARRAY_SIZE ? N_PENDING : MAX_ARRAY_SIZE ))
 
-        for PHENO in "\${PHENOTYPES[@]}"; do
-            for BATCH in 1 2 3 4 5; do
+        # Write manifest for this wave: "task_id PHENO BATCH" per line
+        MANIFEST="\${PERM_DIR}/wave_\${WAVE}_manifest.txt"
+        for (( i=0; i<SLICE; i++ )); do
+            echo "\$((i+1)) \${PENDING[\$i]}"
+        done > "\${MANIFEST}"
+
+        log "--- Wave \${WAVE}: \${SLICE} array tasks (of \${N_PENDING} remaining), \${MAX_CONCURRENT} concurrent ---"
+        ARRAY_JID=\$(submit_wave "w\${WAVE}" "\${MANIFEST}" "\${SLICE}")
+
+        if [[ -z "\${ARRAY_JID}" ]]; then
+            log "ERROR: sbatch failed for wave \${WAVE} — aborting"
+            exit 1
+        fi
+        log "Wave \${WAVE} submitted: array job \${ARRAY_JID}"
+
+        # ── Monitor this wave until all tasks drain ────────────────────────────
+        while true; do
+            sleep 300
+            read -r WV_RUNNING WV_QUEUED <<< "\$(get_array_counts "\${ARRAY_JID}")"
+            DONE=\$(count_done)
+            UNSUBMITTED=\$(( N_PENDING - SLICE ))
+
+            PCT=0
+            [[ \${TOTAL_BATCHES} -gt 0 ]] && PCT=\$(( DONE * 100 / TOTAL_BATCHES ))
+            log "Wave \${WAVE} (job \${ARRAY_JID}) | \${DONE}/\${TOTAL_BATCHES} (\${PCT}%) | running: \${WV_RUNNING} | queued: \${WV_QUEUED} | unsubmitted: \${UNSUBMITTED} | failed: \${PERM_FAILED}"
+            update_status_file "\${DONE}" "\${WV_RUNNING}" "\${WV_QUEUED}" "\${UNSUBMITTED}" "\${PERM_FAILED}"
+
+            [[ \${WV_RUNNING} -eq 0 && \${WV_QUEUED} -eq 0 ]] && break
+        done
+        log "Wave \${WAVE} drained (job \${ARRAY_JID})"
+
+        # ── Rebuild PENDING: failures from this wave + remainder for next wave ─
+        NEXT_PENDING=()
+        for (( i=0; i<SLICE; i++ )); do
+            PHENO="\${PENDING[\$i]%% *}"
+            BATCH="\${PENDING[\$i]##* }"
+            if ! batch_done "\${BATCH_DIR}/\${STUDY_PREFIX}_\${PHENO}_batch_\${BATCH}.rds"; then
                 KEY="\${PHENO}__b\${BATCH}"
-                OUT_FILE="\${BATCH_DIR}/\${STUDY_PREFIX}_\${PHENO}_batch_\${BATCH}.rds"
-
-                if batch_done "\${OUT_FILE}"; then
-                    DONE=\$((DONE+1))
-                    continue
-                fi
-
-                if [[ -v JOB_IDS["\${KEY}"] ]]; then
-                    JID="\${JOB_IDS[\${KEY}]}"
-                    STATE=\$(sacct -j "\${JID}" --format=State --noheader --parsable2 2>/dev/null \
-                             | head -1 | tr -d '[:space:]')
-                    case "\${STATE}" in
-                        RUNNING)    RUNNING=\$((RUNNING+1)) ;;
-                        PENDING)    PENDING=\$((PENDING+1)) ;;
-                        COMPLETED)
-                            # sacct says done but file missing → output didn't publish
-                            log "  WARNING: SLURM COMPLETED but output missing for \${PHENO} b\${BATCH}, resubmitting"
-                            submit_batch "\${PHENO}" "\${BATCH}"
-                            RUNNING=\$((RUNNING+1))
-                            ;;
-                        FAILED|TIMEOUT|CANCELLED|NODE_FAIL|OUT_OF_MEMORY)
-                            RETRIES=\${JOB_RETRIES["\${KEY}"]:-0}
-                            if [[ \${RETRIES} -lt 2 ]]; then
-                                JOB_RETRIES["\${KEY}"]=\$((RETRIES+1))
-                                log "  Retry \$((RETRIES+1))/2: \${PHENO} b\${BATCH} (state: \${STATE})"
-                                submit_batch "\${PHENO}" "\${BATCH}"
-                                RUNNING=\$((RUNNING+1))
-                            else
-                                log "  PERMANENTLY FAILED: \${PHENO} b\${BATCH}"
-                                PERM_FAILED=\$((PERM_FAILED+1))
-                            fi
-                            ;;
-                        "")
-                            # Job not in sacct yet (just submitted) or purged — resubmit if old
-                            RUNNING=\$((RUNNING+1))
-                            ;;
-                        *)
-                            # Unknown state — treat as still running
-                            RUNNING=\$((RUNNING+1))
-                            ;;
-                    esac
+                RETRIES=\${RETRY_COUNT["\${KEY}"]:-0}
+                if [[ \${RETRIES} -lt \${MAX_RETRIES} ]]; then
+                    RETRY_COUNT["\${KEY}"]=\$((RETRIES+1))
+                    log "  Queue retry \$((RETRIES+1))/\${MAX_RETRIES}: \${PHENO} b\${BATCH}"
+                    NEXT_PENDING+=("\${PHENO} \${BATCH}")
                 else
-                    # No job ID tracked — submit fresh
-                    submit_batch "\${PHENO}" "\${BATCH}"
-                    RUNNING=\$((RUNNING+1))
+                    log "  PERMANENTLY FAILED: \${PHENO} b\${BATCH}"
+                    PERM_FAILED=\$((PERM_FAILED+1))
                 fi
-            done
+            fi
+        done
+        # Items beyond this wave's slice carry forward unchanged
+        for (( i=SLICE; i<N_PENDING; i++ )); do
+            NEXT_PENDING+=("\${PENDING[\$i]}")
         done
 
-        log "Progress: \${DONE}/\${TOTAL_BATCHES} done | \${RUNNING} running | \${PENDING} pending | \${PERM_FAILED} permanently failed"
-
-        ACCOUNTED=\$((DONE + PERM_FAILED))
-        if [[ \${ACCOUNTED} -ge \${TOTAL_BATCHES} ]]; then
-            if [[ \${PERM_FAILED} -gt 0 ]]; then
-                log "ERROR: \${PERM_FAILED} batches failed after 2 retries. Check logs in \${JOBS_LOG_DIR}"
-                exit 1
-            fi
-            break
+        if [[ \${#NEXT_PENDING[@]} -gt 0 ]]; then
+            PENDING=("\${NEXT_PENDING[@]}")
+        else
+            PENDING=()
         fi
+
+        log "After wave \${WAVE}: \${#PENDING[@]} batches remain (\${PERM_FAILED} permanent failures so far)"
     done
+
+    if [[ \${PERM_FAILED} -gt 0 ]]; then
+        log "ERROR: \${PERM_FAILED} batches permanently failed. Check logs in \${JOBS_LOG_DIR}"
+        exit 1
+    fi
 
     log "========================================================"
     log "ALL \${TOTAL_BATCHES} BATCHES COMPLETE"
