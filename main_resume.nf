@@ -278,6 +278,7 @@ workflow {
         ch_pheno = PHENOTYPE_PROCESS.out.pheno
         ch_covar = PHENOTYPE_PROCESS.out.covar
         ch_valid_samples = PHENOTYPE_PROCESS.out.valid_samples
+        ch_valid_samples_original = PHENOTYPE_PROCESS.out.valid_samples_original
 
         PHENOTYPE_PROCESS.out.validation_report.view { "Validation report: $it" }
     } else {
@@ -285,16 +286,20 @@ workflow {
         ch_pheno = Channel.fromPath(checkFileExists("${input_dir}/01_phenotype_processing/${params.study_prefix}_pheno.csv", "phenotype file"))
         ch_covar = Channel.fromPath(checkFileExists("${input_dir}/01_phenotype_processing/${params.study_prefix}_covar.csv", "covariate file"))
         ch_valid_samples = Channel.fromPath(checkFileExists("${input_dir}/01_phenotype_processing/${params.study_prefix}_valid_samples.txt", "valid samples file"))
+        ch_valid_samples_original = Channel.fromPath(checkFileExists("${input_dir}/01_phenotype_processing/${params.study_prefix}_valid_samples_original.txt", "original valid samples file"))
     }
 
     // MODULE 2: Genotype Processing
     if (shouldRunStep('genotype', params.resume_from) && params.finalreport_files) {
         log.info "Running GENOTYPE_PROCESS"
         ch_finalreport = Channel.fromPath(params.finalreport_files, checkIfExists: true).collect()
+        ch_allele_codes = Channel.fromPath("${projectDir}/Data/GM/GM_allelecodes.csv", checkIfExists: true)
 
         GENOTYPE_PROCESS(
             ch_finalreport,
             ch_valid_samples,
+            ch_valid_samples_original,
+            ch_allele_codes,
             ch_study_prefix
         )
 

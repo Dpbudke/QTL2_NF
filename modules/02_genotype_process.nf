@@ -5,6 +5,7 @@ process GENOTYPE_PROCESS {
     input:
     path(finalreport_files)
     path(valid_samples_file)
+    path(valid_samples_original_file)
     path(allele_codes_file)
     val(prefix)
     
@@ -168,55 +169,54 @@ if (length(missing_cols) > 0) {
 
 validation_log <- c(validation_log, "✓ Successfully identified required columns")
 
-# Use DO_pipe strategy: get all unique samples from the combined FinalReport data
+# ── Sample ID check stage ──────────────────────────────────────────────────
+# Strategy: use the original (pre-stripping) sample IDs from Module 1 to directly
+# match FinalReport sample IDs — no regex stripping, no cross-project ambiguity.
+# valid_samples_original: original IDs (e.g. DOchln_1) — used for FinalReport matching
+# valid_samples:          stripped IDs (e.g. 1)         — used for output column names
+
+valid_samples_original <- readLines("${valid_samples_original_file}")
+validation_log <- c(validation_log, paste("✓ Loaded original sample IDs:", length(valid_samples_original), "samples"))
+validation_log <- c(validation_log, paste("  Example original ID:", valid_samples_original[1]))
+validation_log <- c(validation_log, paste("  Example stripped ID:", valid_samples[1]))
+
+# Build a 1-to-1 map: original ID -> stripped ID (same line order from Module 1)
+if (length(valid_samples_original) != length(valid_samples)) {
+    stop("Mismatch between valid_samples.txt and valid_samples_original.txt line counts. Re-run Module 1.")
+}
+strip_map <- setNames(as.character(valid_samples), as.character(valid_samples_original))
+
+# All unique sample IDs in the combined FinalReport data
 original_samples <- unique(geno_data[[sample_col]])
 validation_log <- c(validation_log, paste("✓ Combined FinalReport data contains", length(original_samples), "unique samples"))
 
-# Strip project prefix from FinalReport sample IDs to match phenotype module format.
-# Module 1 extracts the numeric suffix (e.g. DOchln_1 -> 1); replicate that here so
-# the intersection works even when FinalReport files contain samples from other projects.
-has_prefix <- any(grepl("_[0-9]+\$", as.character(original_samples)))
-if (has_prefix) {
-    stripped <- sub(".*_([0-9]+)\$", "\\\\1", as.character(original_samples))
-    id_map <- setNames(as.character(original_samples), stripped)  # stripped -> original
-    validation_log <- c(validation_log, "✓ Stripped project prefix from FinalReport sample IDs")
-    validation_log <- c(validation_log, paste("  Example:", original_samples[1], "->", stripped[1]))
-} else {
-    stripped <- as.character(original_samples)
-    id_map <- setNames(stripped, stripped)
-    validation_log <- c(validation_log, "✓ FinalReport sample IDs have no prefix — used as-is")
-}
+# Direct intersection: FinalReport IDs vs original (non-stripped) phenotype IDs
+# This naturally excludes all samples from other projects without any regex logic
+matched_original <- intersect(as.character(original_samples), as.character(valid_samples_original))
 
-# Intersect stripped IDs with valid_samples from the phenotype module
-matched_stripped <- intersect(stripped, as.character(valid_samples))
+validation_log <- c(validation_log, "=== Sample Check Stage ===")
+validation_log <- c(validation_log, paste("  FinalReport samples:           ", length(original_samples)))
+validation_log <- c(validation_log, paste("  Valid samples (original IDs):  ", length(valid_samples_original)))
+validation_log <- c(validation_log, paste("  Matched (this project):        ", length(matched_original)))
+validation_log <- c(validation_log, paste("  Excluded (other projects):     ", length(original_samples) - length(matched_original)))
 
-if (length(matched_stripped) == 0) {
+if (length(matched_original) == 0) {
     stop("No samples remain after intersection filtering! Check sample ID consistency between phenotype and genotype files.")
 }
 
-# Check for ambiguous mappings (two FinalReport IDs stripping to the same ID)
-dupes <- matched_stripped[duplicated(id_map[matched_stripped])]
-if (length(dupes) > 0) {
-    stop(paste("Ambiguous sample ID mapping after prefix stripping — multiple FinalReport IDs map to:",
-               paste(dupes, collapse = ", ")))
-}
+# all_samples: stripped IDs for output column names (consistent with pheno/covar matrices)
+all_samples <- strip_map[matched_original]
 
-# all_samples uses stripped IDs (matches phenotype/covar matrices downstream)
-all_samples <- matched_stripped
-
-# Filter geno_data using original FinalReport IDs, then rename to stripped IDs
-original_matched <- id_map[matched_stripped]
-geno_data <- geno_data[geno_data[[sample_col]] %in% original_matched, ]
-geno_data[[sample_col]] <- sub(".*_([0-9]+)\$", "\\\\1", geno_data[[sample_col]])
+# Filter geno_data to matched samples and rename Sample_ID to stripped form
+geno_data <- geno_data[geno_data[[sample_col]] %in% matched_original, ]
+geno_data[[sample_col]] <- strip_map[geno_data[[sample_col]]]
 
 filtered_samples <- unique(geno_data[[sample_col]])
-samples_removed <- length(original_samples) - length(filtered_samples)
+samples_removed <- length(original_samples) - length(matched_original)
 
-validation_log <- c(validation_log, paste("✓ Applied sample intersection filtering"))
-validation_log <- c(validation_log, paste("  - Original samples in combined FinalReport data:", length(original_samples)))
-validation_log <- c(validation_log, paste("  - Valid samples from phenotype file:", length(valid_samples)))
-validation_log <- c(validation_log, paste("  - Samples after filtering:", length(filtered_samples)))
-validation_log <- c(validation_log, paste("  - Samples removed (other projects + invalid):", samples_removed))
+validation_log <- c(validation_log, "✓ Applied project-matched sample filtering")
+validation_log <- c(validation_log, paste("  - Samples retained:", length(filtered_samples)))
+validation_log <- c(validation_log, paste("  - Samples excluded:", samples_removed))
 
 # Get all unique markers from the allele codes file (the master list of markers)
 all_markers <- allele_codes\$marker

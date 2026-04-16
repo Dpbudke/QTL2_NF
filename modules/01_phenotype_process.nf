@@ -11,7 +11,8 @@ process PHENOTYPE_PROCESS {
     output:
     path("${prefix}_covar.csv"), emit: covar
     path("${prefix}_pheno.csv"), emit: pheno
-    path("${prefix}_valid_samples.txt"), emit: valid_samples
+    path("${prefix}_valid_samples.txt"),          emit: valid_samples
+    path("${prefix}_valid_samples_original.txt"), emit: valid_samples_original
     path("diagnostic_plots/*"), emit: diagnostics, optional: true
     path("validation_report.txt"), emit: validation_report
     path("${prefix}_sample_filter_report.txt"), emit: filter_report
@@ -391,7 +392,12 @@ process PHENOTYPE_PROCESS {
     # Write valid sample list for Module 2 to use for genotype filtering
     valid_sample_ids <- rownames(mPhen)
     writeLines(valid_sample_ids, "${prefix}_valid_samples.txt")
+
+    # Also write the original (pre-stripping) sample IDs so Module 2 can directly
+    # match against FinalReport sample IDs without ambiguity across projects
+    writeLines(original_rownames, "${prefix}_valid_samples_original.txt")
     validation_log <- c(validation_log, paste("✓ Wrote valid sample list:", length(valid_sample_ids), "samples"))
+    validation_log <- c(validation_log, paste("✓ Wrote original sample IDs:", length(original_rownames), "samples"))
 
     cat("Phenotype processing completed successfully\\n")
     cat("Check validation_report.txt for detailed information\\n")

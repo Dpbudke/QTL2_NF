@@ -229,6 +229,7 @@ workflow {
         GENOTYPE_PROCESS(
             ch_finalreport,
             PHENOTYPE_PROCESS.out.valid_samples,
+            PHENOTYPE_PROCESS.out.valid_samples_original,
             ch_allele_codes,
             ch_study_prefix
         )
