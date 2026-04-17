@@ -69,6 +69,9 @@ The pipeline uses a specialized CSV format that facilitates automated parsing of
 - **Age**: Age at measurement or sacrifice
 - Additional experimental factors as needed
 
+**Single-Sex Studies**:
+For studies with only one sex (all-female or all-male cohorts), the `sex` column must still be present in the covariate file because r/qtl2 uses it as cross metadata for X chromosome handling — it is not only a statistical covariate. Do not omit this column from the input file. If the `sex` column is absent, use `single_sex = 'female'` (or `'male'`) in `nextflow.config` and the pipeline will add it automatically. See the `--single_sex` parameter documentation in the Configuration section for full details.
+
 **Phenotype Data Types Supported**:
 - **Clinical phenotypes**: Body weight, organ weights, biochemical measurements
 - **Gene expression**: RNA-seq derived expression levels (log2 CPM + inverse rank normalized)
@@ -130,6 +133,7 @@ The pipeline consists of 9 numbered modules (plus optional Module 6b) organized 
 - **Quality Control Diagnostics**: Comprehensive outlier detection, batch effect assessment, and correlation analysis with detailed visualization reports
 - **Format Compliance**: Generation of r/qtl2-compliant data structures with proper metadata integration
 - **Missing Data Management**: Intelligent handling of missing values with appropriate encoding strategies for downstream statistical analysis
+- **Single-Sex Study Support**: When `--single_sex` is set, auto-adds the sex column if missing and protects `sex`, `ngen`, and `generation` from covariate exclusion; these columns are always written to the covariate file because r/qtl2 requires them as cross metadata (sex chromosome handling, DO cross creation), regardless of whether they vary across samples
 
 **Input Format Requirements**:
 The module processes specially formatted CSV files with the following convention:
@@ -211,6 +215,8 @@ The module processes specially formatted CSV files with the following convention
 - **Smart LOD Filtering**: Pre-filters phenotypes using find_peaks() before expensive permutation testing
 - **Multiple Peak Detection**: Identifies ALL QTL peaks per phenotype (drop=1.5 LOD threshold) for comprehensive analysis
 - **Comprehensive Logging**: Detailed per-batch logs with timestamps, node information, and processing statistics
+
+**Single-Sex Covariate Handling**: After building the additive covariate matrix via `model.matrix()`, if the resulting matrix has zero columns (which happens when all covariates have no variation — for example, sex in an all-female study), `addcovar` is automatically set to `NULL` with a log message and `scan1` runs without additive covariates. This means sex remains in the cross object as required metadata but naturally drops out of the statistical model without any user intervention beyond setting `--single_sex`.
 
 **Technical Innovation**: Enables processing of datasets with 10,000+ phenotypes through batched parallel execution, preventing infrastructure bottlenecks while maintaining memory efficiency
 
@@ -508,6 +514,38 @@ nextflow run main.nf \
   --study_prefix DOchln \
   --lod_threshold 7.0 \
   --outdir results/ \
+  -profile standard
+```
+
+**Single-Sex Studies**:
+```bash
+# All-female study: sex column is retained in the cross object for X chromosome handling
+# but drops out of the statistical model automatically because it has no variation
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_females \
+  --lod_threshold 7.0 \
+  --single_sex female \
+  -profile standard
+
+# All-male study
+nextflow run main.nf \
+  --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_males \
+  --lod_threshold 7.0 \
+  --single_sex male \
+  -profile standard
+
+# Single-sex study where the sex column is absent from the input file:
+# --single_sex auto-adds the column with the correct value before cross object creation
+nextflow run main.nf \
+  --phenotype_file Data/females_only_no_sex_col.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix DOchln_females_nosexcol \
+  --lod_threshold 7.0 \
+  --single_sex female \
   -profile standard
 ```
 
@@ -885,6 +923,7 @@ apptainer {
 - `--lod_threshold`: LOD score threshold for permutation pre-filtering (default: 7.0)
 - `--outdir`: Output directory path (default: results)
 - `--sample_filter`: JSON string for sample subsetting (e.g., '{"Sex":["male"],"Diet":["hc"]}')
+- `--single_sex`: Set to `'female'` or `'male'` for single-sex studies (default: null). See details below.
 - `--test_mode`: Development mode - process chromosome 2 only (default: false)
 
 **Regional Filtering Parameters (Module 6b)**:
@@ -911,6 +950,55 @@ apptainer {
 --study_prefix DOchln_males_hc \
 --sample_filter '{"Sex":["male"],"Diet":["hc"]}' \
 --lod_threshold 5.0
+
+# All-female single-sex study
+--phenotype_file Data/females_only.csv \
+--finalreport_files 'Data/FinalReport*.txt' \
+--study_prefix DOchln_females \
+--single_sex female \
+--lod_threshold 7.0
+```
+
+### Single-Sex Study Parameter (`--single_sex`)
+
+**Background**: r/qtl2 requires a `sex` column in the covariate file to build the cross object correctly, specifically for X chromosome genotype encoding and sex chromosome handling. This requirement exists even when all animals are the same sex — the column is used as cross metadata, not only as a statistical covariate. In a standard mixed-sex study the column is always present. In a single-sex study it may be absent from the phenotype input, or a user may attempt to exclude it via `exclude_covariates`, which previously caused module 03 to fail with a "sex column not found" error.
+
+**What `--single_sex` does** (across four pipeline components):
+
+1. **`nextflow.config`**: Defines the parameter (default `null`). Set to `'female'` or `'male'` in the config file or pass on the command line.
+
+2. **Module 01 (Phenotype Processing)**: If `--single_sex` is set and the `sex` column is absent from the covariate data, the module auto-adds a `Sex` column populated with the appropriate value (`Female` or `Male`). Additionally, `sex`, `ngen`, and `generation` are now permanently protected from `exclude_covariates` removal — the pipeline logs a note if a user attempts to exclude them and retains the columns regardless.
+
+3. **Module 03 (Control File Generation)**: Receives the covariate file with the `sex` column present, so cross object creation succeeds without modification.
+
+4. **Module 06 (QTL Analysis)**: After `model.matrix()` expands covariates into numeric columns, if the resulting matrix has zero columns (which occurs when sex is the only covariate and has no variation in a single-sex study), `addcovar` is automatically set to `NULL` and `scan1` runs without additive covariates. A log message records this behavior.
+
+**Key behaviors**:
+- `sex`, `ngen`, and `generation` are always retained in the covariate file regardless of `exclude_covariates`; attempting to exclude them produces a log note rather than an error
+- In a single-sex study, sex remains in the cross object as required metadata but naturally produces zero dummy variables from `model.matrix()` — it does not affect the statistical model in module 06
+- Users do not need to set `exclude_covariates = 'Sex'`; sex is handled correctly without it
+- Valid values: `'female'`, `'male'`, `'f'`, `'m'` (case-insensitive); `null` (default) disables the feature
+
+**When to use**:
+- Your study cohort contains only females or only males
+- The input phenotype CSV does not have a `Sex` column (auto-add mode)
+- The input CSV has a `Sex` column but you want to ensure it cannot be accidentally excluded by `exclude_covariates`
+
+**Configuration in `nextflow.config`**:
+```groovy
+params {
+    single_sex = 'female'   // or 'male', or null for mixed-sex studies
+}
+```
+
+**Command-line equivalent**:
+```bash
+nextflow run main.nf \
+  --phenotype_file Data/females_only.csv \
+  --finalreport_files 'Data/FinalReport*.txt' \
+  --study_prefix MyFemaleStudy \
+  --single_sex female \
+  -profile standard
 ```
 
 ## Citation
