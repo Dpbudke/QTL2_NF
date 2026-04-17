@@ -7,7 +7,8 @@ process PHENOTYPE_PROCESS {
     val(prefix)
     val(sample_filter_json)
     val(exclude_covariates)
-    
+    val(single_sex)
+
     output:
     path("${prefix}_covar.csv"), emit: covar
     path("${prefix}_pheno.csv"), emit: pheno
@@ -278,7 +279,29 @@ process PHENOTYPE_PROCESS {
         validation_log <- c(validation_log, paste("✓ Remaining covariates:", paste(colnames(covar_data), collapse = ", ")))
     }
 
+    # Handle single-sex study: auto-add sex column if missing, using the specified sex value
+    single_sex_param <- tolower(trimws("${single_sex}"))
+    if (single_sex_param %in% c("female", "male", "f", "m")) {
+        sex_val <- ifelse(single_sex_param %in% c("female", "f"), "Female", "Male")
+        covar_names_lower <- tolower(colnames(covar_data))
+        if (!any(covar_names_lower == "sex")) {
+            covar_data[["Sex"]] <- sex_val
+            validation_log <- c(validation_log, paste("✓ single_sex =", single_sex_param,
+                "- auto-added Sex column with value:", sex_val))
+        } else {
+            validation_log <- c(validation_log, paste("✓ single_sex =", single_sex_param,
+                "- Sex column already present, no change needed"))
+        }
+    }
+
     # Handle user-specified covariate exclusions
+    # sex and ngen/generation are protected: they are qtl2 cross metadata required for
+    # X chromosome handling (sex_covar) and DO cross creation (crossinfo_covar).
+    # They stay in the covariate file so the cross object builds correctly.
+    # In an all-female/all-male study, sex has no variation and model.matrix will
+    # naturally produce no column for it, so it drops out of the statistical model in module 06.
+    protected_lower <- c("sex", "ngen", "generation")
+
     exclude_covars_str <- "${exclude_covariates}"
     if (exclude_covars_str != "null" && nchar(exclude_covars_str) > 0) {
         # Parse comma-separated list of covariates to exclude
@@ -288,7 +311,12 @@ process PHENOTYPE_PROCESS {
         validation_log <- c(validation_log, "=== User-Specified Covariate Exclusions ===")
 
         for (covar_to_exclude in exclude_list) {
-            if (covar_to_exclude %in% colnames(covar_data)) {
+            if (tolower(covar_to_exclude) %in% protected_lower) {
+                validation_log <- c(validation_log, paste("⚠ NOTE:", covar_to_exclude,
+                    "is protected qtl2 cross metadata (needed for cross object creation) and cannot",
+                    "be excluded from the covariate file. It will be retained but will have no effect",
+                    "as a statistical covariate if it has no variation (e.g., all-female study)."))
+            } else if (covar_to_exclude %in% colnames(covar_data)) {
                 covar_data <- covar_data[, !colnames(covar_data) %in% covar_to_exclude, drop = FALSE]
                 validation_log <- c(validation_log, paste("✓ Removed", covar_to_exclude, "from covariates (user-specified)"))
             } else {

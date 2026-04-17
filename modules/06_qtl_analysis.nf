@@ -170,6 +170,13 @@ process GENOME_SCAN_BATCH {
             log_message(paste("Additive covariates:", ncol(covar_data), "covariates expanded to", ncol(addcovar), "numeric columns"))
             log_message("No interactive covariate specified - using additive model only")
         }
+
+        # If all covariates were constant (e.g., sex in an all-female study), model.matrix
+        # produces no columns after dropping the intercept - treat as no additive covariates
+        if (!is.null(addcovar) && ncol(addcovar) == 0) {
+            addcovar <- NULL
+            log_message("NOTE: All covariates had no variation (e.g., single-sex study) - running scan without additive covariates")
+        }
     } else {
         log_message("No covariates found in cross2 object")
     }

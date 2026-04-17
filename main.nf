@@ -41,6 +41,7 @@ def helpMessage() {
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
         --exclude_covariates  Comma-separated covariates to exclude from model (e.g., 'Diet,batch') [default: null]
+        --single_sex        Set to 'female' or 'male' for single-sex studies; ensures sex column is present in the cross object even if missing or excluded [default: null]
         --interactive_covar Covariate to test as interactive term for GxE analysis (e.g., 'Diet') [default: null]
     
     Pipeline Modules:
@@ -214,7 +215,8 @@ workflow {
         ch_phenotype_file,
         ch_study_prefix,
         Channel.value(effective_sample_filter ?: "null"),
-        Channel.value(effective_exclude_covariates ?: "null")
+        Channel.value(effective_exclude_covariates ?: "null"),
+        Channel.value(params.single_sex ?: "null")
     )
     
     // MODULE 2: Genotype Processing (if FinalReport files provided)

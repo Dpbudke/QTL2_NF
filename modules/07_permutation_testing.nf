@@ -324,6 +324,20 @@ STATUSEOF
         echo "\${RUNNING} \${QUEUED}"
     }
 
+    # ── Helper: detect and release any held tasks in an array job ─────────────
+    # SLURM holds jobs after repeated launch/env failures (requeued held).
+    # Held tasks still report PD state, so the drain condition never triggers
+    # without a release. This auto-releases them and logs a warning.
+    release_held_jobs() {
+        local JID="\$1"
+        local HELD
+        HELD=\$(squeue -j "\${JID}" -h --format="%r" 2>/dev/null | grep -c "held" || true)
+        if [[ \${HELD} -gt 0 ]]; then
+            log "WARNING: \${HELD} task(s) in held state for job \${JID} — running scontrol release"
+            scontrol release "\${JID}" 2>/dev/null || true
+        fi
+    }
+
     # ── Write the array worker script ─────────────────────────────────────────
     # Each SLURM array task reads its PHENO/BATCH from the wave manifest using
     # \$SLURM_ARRAY_TASK_ID, then runs perm_batch_worker.R via apptainer.
@@ -427,6 +441,7 @@ ARRAYEOF
         # ── Monitor this wave until all tasks drain ────────────────────────────
         while true; do
             sleep 300
+            release_held_jobs "\${ARRAY_JID}"
             read -r WV_RUNNING WV_QUEUED <<< "\$(get_array_counts "\${ARRAY_JID}")"
             DONE=\$(count_done)
             UNSUBMITTED=\$(( N_PENDING - SLICE ))
