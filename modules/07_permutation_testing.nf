@@ -211,8 +211,18 @@ if (!is.null(cross2\$covar)) {
     if ("coat_color" %in% colnames(covar_data)) {
         covar_data <- covar_data[, !colnames(covar_data) %in% "coat_color", drop = FALSE]
     }
-    covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
-    addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+    constant_cols <- sapply(covar_data, function(x) length(unique(na.omit(x))) < 2)
+    if (any(constant_cols)) {
+        cat("NOTE: Removing constant covariate(s) with no variation:", paste(names(which(constant_cols)), collapse=", "), "\\n")
+        covar_data <- covar_data[, !constant_cols, drop = FALSE]
+    }
+    if (ncol(covar_data) > 0) {
+        covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
+        addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+        if (ncol(addcovar) == 0) addcovar <- NULL
+    } else {
+        addcovar <- NULL
+    }
 } else {
     addcovar <- NULL
 }
