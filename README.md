@@ -216,7 +216,7 @@ The module processes specially formatted CSV files with the following convention
 - **Multiple Peak Detection**: Identifies ALL QTL peaks per phenotype (drop=1.5 LOD threshold) for comprehensive analysis
 - **Comprehensive Logging**: Detailed per-batch logs with timestamps, node information, and processing statistics
 
-**Single-Sex Covariate Handling**: After building the additive covariate matrix via `model.matrix()`, if the resulting matrix has zero columns (which happens when all covariates have no variation — for example, sex in an all-female study), `addcovar` is automatically set to `NULL` with a log message and `scan1` runs without additive covariates. This means sex remains in the cross object as required metadata but naturally drops out of the statistical model without any user intervention beyond setting `--single_sex`.
+**Single-Sex Covariate Handling**: Before calling `model.matrix()`, module 06 explicitly filters out any covariate columns that have fewer than two unique non-missing values (constant columns). This step is required because passing a constant factor such as `Sex` in an all-female study directly to `model.matrix()` crashes R with `contrasts can be applied only to factors with 2 or more levels`. The removed covariate names are written to the batch log so the filtering is fully auditable. After the constant-column filter, a secondary guard checks whether the resulting covariate data frame is empty; if so, `addcovar` is set to `NULL` and `scan1` runs without additive covariates. Sex remains in the cross object as required metadata for X chromosome handling but is dropped from the statistical model explicitly in this step rather than silently.
 
 **Technical Innovation**: Enables processing of datasets with 10,000+ phenotypes through batched parallel execution, preventing infrastructure bottlenecks while maintaining memory efficiency
 
@@ -520,7 +520,7 @@ nextflow run main.nf \
 **Single-Sex Studies**:
 ```bash
 # All-female study: sex column is retained in the cross object for X chromosome handling
-# but drops out of the statistical model automatically because it has no variation
+# but is filtered out of the statistical model by module 06 before model.matrix() is called
 nextflow run main.nf \
   --phenotype_file Data/QTL2_NF_meta_pheno_input.csv \
   --finalreport_files 'Data/FinalReport*.txt' \
@@ -971,11 +971,11 @@ apptainer {
 
 3. **Module 03 (Control File Generation)**: Receives the covariate file with the `sex` column present, so cross object creation succeeds without modification.
 
-4. **Module 06 (QTL Analysis)**: After `model.matrix()` expands covariates into numeric columns, if the resulting matrix has zero columns (which occurs when sex is the only covariate and has no variation in a single-sex study), `addcovar` is automatically set to `NULL` and `scan1` runs without additive covariates. A log message records this behavior.
+4. **Module 06 (QTL Analysis)**: Before calling `model.matrix()`, a constant-column filter explicitly removes any covariates that have fewer than two unique non-missing values (e.g., `Sex` in an all-female study). Passing such a covariate directly to `model.matrix()` would crash R with a contrasts error; the filter prevents this and logs the names of removed covariates. A secondary guard then checks whether the covariate data frame is empty after filtering; if so, `addcovar` is set to `NULL` and `scan1` runs without additive covariates.
 
 **Key behaviors**:
 - `sex`, `ngen`, and `generation` are always retained in the covariate file regardless of `exclude_covariates`; attempting to exclude them produces a log note rather than an error
-- In a single-sex study, sex remains in the cross object as required metadata but naturally produces zero dummy variables from `model.matrix()` — it does not affect the statistical model in module 06
+- In a single-sex study, sex remains in the cross object as required metadata but is explicitly filtered out in module 06 before `model.matrix()` is called — it does not affect the statistical model, and the filtering is recorded in the batch log
 - Users do not need to set `exclude_covariates = 'Sex'`; sex is handled correctly without it
 - Valid values: `'female'`, `'male'`, `'f'`, `'m'` (case-insensitive); `null` (default) disables the feature
 

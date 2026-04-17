@@ -298,8 +298,8 @@ process PHENOTYPE_PROCESS {
     # sex and ngen/generation are protected: they are qtl2 cross metadata required for
     # X chromosome handling (sex_covar) and DO cross creation (crossinfo_covar).
     # They stay in the covariate file so the cross object builds correctly.
-    # In an all-female/all-male study, sex has no variation and model.matrix will
-    # naturally produce no column for it, so it drops out of the statistical model in module 06.
+    # In an all-female/all-male study, sex has no variation; module 06 filters it
+    # out before calling model.matrix to avoid the contrasts<- crash.
     protected_lower <- c("sex", "ngen", "generation")
 
     exclude_covars_str <- "${exclude_covariates}"

@@ -137,6 +137,13 @@ process GENOME_SCAN_BATCH {
             log_message("Removed coat_color from covariates (genetic phenotype)")
         }
 
+        # Remove constant columns before model.matrix (single-level factors cause contrasts<- to crash)
+        constant_cols <- sapply(covar_data, function(x) length(unique(na.omit(x))) < 2)
+        if (any(constant_cols)) {
+            log_message(paste("Removing constant covariate(s) with no variation:", paste(names(which(constant_cols)), collapse=", ")))
+            covar_data <- covar_data[, !constant_cols, drop = FALSE]
+        }
+
         # Check if interactive covariate is specified
         interactive_covar_name <- "${interactive_covar}"
 
