@@ -229,6 +229,10 @@ process GENOME_SCAN_BATCH {
         chunk_start_time <- Sys.time()
 
         # Run scan for this chunk
+        # Reduce cores for interactive models — intcovar expands memory footprint
+        # significantly and OOM-kills workers at full 96-core parallelism
+        scan_cores <- if ("${interactive_covar}" != "null" && "${interactive_covar}" != "") 64L else 0L
+
         tryCatch({
             scan_result <- scan1(
                 genoprob = alleleprob,
@@ -237,7 +241,7 @@ process GENOME_SCAN_BATCH {
                 addcovar = addcovar,
                 intcovar = intcovar,
                 Xcovar = Xcovar,
-                cores = 0  # Use all available cores
+                cores = scan_cores
             )
 
             chunk_end_time <- Sys.time()

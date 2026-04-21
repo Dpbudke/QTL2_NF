@@ -6,6 +6,7 @@ test_results/
 nextflow_work/
 singularity_cache/
 .nextflow/
+.nextflow*
 .nextflow.log*
 .nextflow.log
 .claude/

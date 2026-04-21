@@ -12,7 +12,8 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     output:
     path "eqtl_cis_trans_classification.csv", emit: classification
     path "eqtl_classification_summary.txt", emit: summary
-    path "eqtl_classification_report.html", emit: report, optional: true
+    path "qtl2_position_map.rds",            emit: position_map
+    path "eqtl_classification_report.html",  emit: report, optional: true
 
     script:
     def cis_window_mb = params.cis_window_mb ?: 2.0
@@ -26,30 +27,22 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     cat("Reading QTL data...\\n")
     qtls <- fread("${qtl_file}")
 
-    # Load cross2 object to get genetic and physical maps
+    # Load cross2 to extract gmap/pmap, then save as reusable position map output
     cat("Loading cross2 object for coordinate conversion...\\n")
     cross2 <- readRDS("${cross2_file}")
     gmap <- cross2\$gmap
     pmap <- cross2\$pmap
+    saveRDS(list(gmap = gmap, pmap = pmap), "qtl2_position_map.rds")
+    cat("  Position map saved\\n")
 
-    # Convert QTL positions from cM to Mb using interpolation
+    # Convert QTL positions from cM to Mb — vectorized per chromosome
     cat("Converting QTL positions from cM to Mb...\\n")
-    qtls[, pos_mb := {
-        result <- numeric(.N)
-        for (i in seq_len(.N)) {
-            chr_name <- as.character(chr[i])
-            pos_cM <- pos[i]
-            if (chr_name %in% names(gmap) && chr_name %in% names(pmap)) {
-                chr_gmap <- gmap[[chr_name]]
-                chr_pmap <- pmap[[chr_name]]
-                result[i] <- approx(chr_gmap, chr_pmap, xout = pos_cM, rule = 2)\$y
-            } else {
-                result[i] <- NA_real_
-            }
-        }
-        result
-    }]
-
+    qtls[, pos_mb := NA_real_]
+    for (chr_name in intersect(unique(qtls\$chr), intersect(names(gmap), names(pmap)))) {
+        idx <- qtls\$chr == chr_name
+        qtls[idx, pos_mb := approx(gmap[[chr_name]], pmap[[chr_name]],
+                                   xout = pos, rule = 2)\$y]
+    }
     cat("  Converted", sum(!is.na(qtls\$pos_mb)), "of", nrow(qtls), "QTL positions\\n")
 
     # Read and process GTF file

@@ -63,11 +63,10 @@ include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans
 
 workflow {
     // Create input channels
-    qtl_ch = Channel.fromPath(params.qtl_file, checkIfExists: true)
-    gtf_ch = Channel.fromPath(params.gtf_file, checkIfExists: true)
+    qtl_ch    = Channel.fromPath(params.qtl_file, checkIfExists: true)
+    gtf_ch    = Channel.fromPath(params.gtf_file, checkIfExists: true)
     cross2_ch = Channel.fromPath(params.cross2_file, checkIfExists: true)
 
-    // Run classification (with cM to Mb conversion using cross2 maps)
     CLASSIFY_CIS_TRANS_EQTLS(qtl_ch, gtf_ch, cross2_ch)
 }
 

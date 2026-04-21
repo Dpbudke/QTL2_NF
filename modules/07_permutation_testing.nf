@@ -299,9 +299,10 @@ RSCRIPT
         [[ -f "\${F}" ]] && [[ \$(stat -c%s "\${F}" 2>/dev/null || echo 0) -gt 1000 ]]
     }
 
-    # ── Helper: count completed .rds files in batch dir (fast, one ls call) ──
+    # ── Helper: count completed .rds files in batch dir ──────────────────────
+    # find exits 0 when no files match; ls with glob fails (exit 2) under pipefail
     count_done() {
-        ls "\${BATCH_DIR}"/*.rds 2>/dev/null | wc -l
+        find "\${BATCH_DIR}" -maxdepth 1 -name "*.rds" 2>/dev/null | wc -l
     }
 
     # ── Helper: update COORDINATOR_STATUS.txt ────────────────────────────────
