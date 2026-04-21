@@ -9,35 +9,6 @@ A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed 
 
 QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and genotype data to identify quantitative trait loci (QTLs) with rigorous statistical significance testing. The pipeline is optimized for large-scale datasets and provides interactive visualization through QTL Viewer integration. Building upon methodologies from the DO_Pipe project (https://github.com/exsquire/DO_pipe), this pipeline implements automated workflows for multiparental population analysis with enhanced scalability and reproducibility.
 
-## Getting Started / Post-Clone Setup
-
-After cloning the repository, one setup step is required before running the pipeline.
-
-**1. Clone the repository**
-```bash
-git clone <repo-url> QTL2_NF
-cd QTL2_NF
-```
-
-**2. Pull the container image (required)**
-
-The `singularity_cache/` directory is gitignored because the `.img` file is a large binary. Create the directory and pull the image manually:
-```bash
-mkdir singularity_cache
-apptainer pull singularity_cache/dpbudke-qtl2-pipeline-latest.img \
-    docker://dpbudke/qtl2-pipeline:latest
-```
-
-This is the only required setup step. No configuration changes are needed.
-
-**3. No path configuration required**
-
-All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable that automatically resolves to the directory containing `main.nf`. The pipeline works correctly regardless of what the cloned directory is named or where it lives on the filesystem.
-
-**Note on gitignored directories**: `nextflow_work/` (Nextflow work directory) and `singularity_cache/` (container image) are both gitignored and created locally. They are not tracked in version control.
-
----
-
 ## Input Data Requirements
 
 ### Phenotype File Format
@@ -307,18 +278,20 @@ The previous design submitted individual SLURM batch jobs directly through Nextf
 
 **Key Functions**:
 - **High-Confidence QTL Focus**: Visualizes only 99% significant QTLs from Module 8 for maximum stringency
-- **Founder Allele Effect Plots**: Uses plot_coefCC() to display founder strain allele effects with LOD scores
-- **Coefficient Calculation**: Computes scan1coef() founder allele effects using alleleprobs
+- **Founder Allele Effect Plots**: Generates LOD score plots, scan1coef() founder allele coefficient plots, and BLUP effect plots for each significant QTL
+- **Coefficient Calculation**: Computes scan1coef() founder allele effects and scan1blup() shrinkage estimates using alleleprobs
 - **Chromosome Organization**: Automatically organizes plots into chromosome-specific subdirectories (chr1/ through chr19/ and chrX/)
 - **Batch Processing**: Efficiently processes thousands of QTLs with progress monitoring
-- **Publication Quality**: 800x600 pixel PNG format with optimized margins and gray95 background
-- **Comprehensive Naming**: Each plot filename includes gene ID, chromosome, position (cM), and LOD score for easy identification
+- **Comprehensive Naming**: Each plot filename includes phenotype, chromosome, position (Mb), LOD score, and plot type for easy identification
 - **Validation Reporting**: Detailed summary of plots generated per chromosome with success/failure tracking
 
 **Output Organization**:
 - **chr{1-19,X}/ subdirectories**: Plots organized by chromosome for easy navigation
-- **Filename format**: `{gene_id}_chr{chr}_{pos}cM_LOD{lod}.png`
-- **Example**: `ENSMUSG00000012345_chr12_85.3cM_LOD12.45.png`
+- **Filename format**: `{phenotype}_chr{chr}_{pos}Mb_LOD{lod}_{type}.png`
+  - `{type}` is one of: `lod`, `coef_effects`, `blup_effects`
+- **Example**: `TMAO_base_ln_chr12_86.1Mb_LOD27.92_lod.png`
+- **GxE analyses** (`--interactive_covar`): Plots are additionally stratified by covariate level (e.g., `ain76a_coef_effects.png`, `hc_coef_effects.png`, `full_coef_effects.png`)
+- **Setup files**: `viz_batch_qtls.csv`, `viz_batch_ids.txt`, `viz_setup_log.txt`
 
 **Use Cases**:
 - **Publication Figures**: High-quality visualizations for manuscripts and presentations
@@ -326,7 +299,40 @@ The previous design submitted individual SLURM batch jobs directly through Nextf
 - **QTL Validation**: Quick visual confirmation of strong, biologically meaningful QTL signals
 - **Follow-up Prioritization**: Identify QTLs with interesting allele effect patterns for further investigation
 
-**Resources**: 4 CPUs, 32GB RAM, 8 hours
+**Resources**: SETUP 2 CPUs / 8 GB / 30 min; BATCH 16 CPUs / 128 GB (scales on retry) / 2 h; AGGREGATE 2 CPUs / 8 GB / 30 min
+
+### Module 10: TIMBR Allelic Series Analysis (`10_timbr.nf`)
+**Purpose**: Infer the number of functional alleles among the 8 DO founder strains at each significant QTL using Bayesian MCMC (TIMBR; Crouse et al. 2020, *Genetics* 216:957–983)
+
+**Key Functions**:
+- **Allelic Series Inference**: Determines how many of the 8 founder haplotypes carry functionally distinct alleles at each QTL
+- **Tree-Informed Prior**: Uses the DO/CC founder phylogenetic tree as a Dirichlet Process prior, improving power over flat priors
+- **Configurable Significance Threshold**: Filters QTLs at `--timbr_sig_level` (default: 99%; options: 63%, 90%, 95%, 99%)
+- **Batch MCMC**: Parallelizes TIMBR() calls across SLURM array jobs; default 10,000 MCMC samples per QTL
+- **Four Diagnostic Plots per QTL**: Haplotype effects, allele count distribution, top allelic series patterns, and TIMBR-vs-qtl2 founder effect comparison
+- **Master Summary Table**: Aggregates ln(BF), MAP allelic series pattern, functional allele count, and posterior probability across all analyzed QTLs
+
+**Process Workflow**:
+1. **TIMBR_SETUP**: Filters and deduplicates significant QTLs, assigns batches, pre-computes additive covariate matrix
+2. **TIMBR_BATCH**: Runs TIMBR() per QTL; extracts MAP allelic series, counts functional allele groups, saves optional RDS object and 4 PNG plots
+3. **TIMBR_AGGREGATE**: Combines batch CSVs into master summary; reports functional allele distribution and median ln(BF)
+
+**Key Parameters**:
+- `--timbr_sig_level` — Minimum significance threshold (default: `"99%"`)
+- `--timbr_qtls_per_batch` — QTLs per SLURM batch (default: `20`, matched to 20 CPUs for mclapply)
+- `--timbr_samples` — MCMC iterations per QTL (default: `10000`)
+- `--run_timbr` — Set to `false` to skip this module (default: `true`)
+
+**Output Files**:
+- `{prefix}_timbr_master_summary.csv` — All QTL results: `lodcolumn, chr, pos, peak_Mb, lod, significance_level, nearest_marker, ln_BF, n_functional_alleles, top_series_pattern, top_series_prob, n_samples_used, status`
+- `{prefix}_timbr_run_report.txt` — Functional allele distribution, results by significance level, median ln(BF)
+- `chr{N}/{phenotype}_chr{N}_{pos}Mb/{phenotype}_chr{N}_{pos}Mb.rds` — Full TIMBR result object (optional)
+- `chr{N}/{phenotype}_chr{N}_{pos}Mb/plots/01_haplotype_effects.png` — Posterior haplotype effects
+- `chr{N}/{phenotype}_chr{N}_{pos}Mb/plots/02_n_alleles_distribution.png` — Posterior functional allele count
+- `chr{N}/{phenotype}_chr{N}_{pos}Mb/plots/03_top_allelic_series.png` — Top 10 allelic series patterns
+- `chr{N}/{phenotype}_chr{N}_{pos}Mb/plots/04_allelic_series_vs_founder_effects.png` — TIMBR vs qtl2 ROP comparison
+
+**Resources**: SETUP 4 CPUs / 32 GB / 30 min; BATCH 20 CPUs / 64 GB (128 GB on retry) / 2 h; AGGREGATE 4 CPUs / 16 GB / 30 min
 
 ### Optional: Broman Mixup QC (`broman_mixup_qc.nf`)
 **Purpose**: Detect sample mix-ups by comparing observed expression patterns with genotype-predicted expression using eQTL signatures
@@ -452,6 +458,31 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 
 ## Installation and Setup
 
+### Quick Setup
+
+**1. Clone the repository**
+```bash
+git clone <repo-url> QTL2_NF
+cd QTL2_NF
+```
+
+**2. Pull the container image (required)**
+
+The `singularity_cache/` directory is gitignored because the `.img` file is a large binary. Create the directory and pull the image manually:
+```bash
+mkdir singularity_cache
+apptainer pull singularity_cache/dpbudke-qtl2-pipeline-latest.img \
+    docker://dpbudke/qtl2-pipeline:latest
+```
+
+This is the only required setup step. No configuration changes are needed.
+
+**3. No path configuration required**
+
+All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable that automatically resolves to the directory containing `main.nf`. The pipeline works correctly regardless of what the cloned directory is named or where it lives on the filesystem.
+
+**Note on gitignored directories**: `nextflow_work/` (Nextflow work directory) and `singularity_cache/` (container image) are both gitignored and created locally. They are not tracked in version control.
+
 ### Prerequisites
 
 **Software Requirements**:
@@ -468,10 +499,6 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 
 1. **Environment Setup**:
 ```bash
-# Clone repository
-git clone https://github.com/Dpbudke/QTL2_NF.git
-cd QTL2_NF
-
 # Configure HPC settings
 # Edit nextflow.config to match your SLURM account and resource allocations
 ```
@@ -676,68 +703,6 @@ nextflow run main_resume.nf \
 
 **Note on `perm_aggregate`**: This resume case passes the phenotype list file as a trigger rather than staging thousands of batch files as Nextflow inputs. `PERM_AGGREGATE` reads batch files directly from the published `07_permutation_testing/batches/` directory on the shared filesystem.
 
-### Running Permutation Testing
-
-Permutation runs are long-lived (hours to days) and require both the Nextflow driver and the `PERM_COORDINATOR` job to remain alive. Because interactive VS Code sessions have a 10-hour wall time limit, the recommended approach is to submit the Nextflow driver itself as a 7-day SLURM job using a wrapper script. This creates two independent layers of session-independence: the driver is a SLURM job, and the coordinator it spawns is also a SLURM job.
-
-**Recommended: Submit via sbatch wrapper**
-
-Pre-made wrapper scripts live in `Temp/`. To launch a permutation resume for a specific analysis:
-
-```bash
-# Submit the AIN76_only permutation resume as a 7-day SLURM job
-sbatch Temp/resume_ain76_perm.sh
-
-# Check submission status
-squeue -u dawson.budke --name=nf_ain76_perm_resume
-
-# Tail the driver log to monitor Nextflow progress
-tail -f Temp/ain76_permutation_resume.log
-```
-
-The wrapper script (`Temp/resume_ain76_perm.sh`) runs `nextflow run main_resume.nf --resume_from permutation ...` inside a 7-day SLURM job. Once Nextflow dispatches `PERM_COORDINATOR`, the coordinator manages all batch submissions independently. If the driver job dies for any reason, the coordinator continues running and all in-progress batch work is preserved.
-
-**Creating a wrapper for a new analysis type**
-
-Model new wrapper scripts on `Temp/resume_ain76_perm.sh`. The key SLURM directives to include are:
-
-```bash
-#SBATCH --time=7-00:00:00      # Match coordinator wall time
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=8G
-#SBATCH --output=Temp/{analysis}_perm.log
-#SBATCH --open-mode=append     # Append so log survives driver restarts
-```
-
-**Monitoring coordinator progress**
-
-The coordinator writes a detailed progress log to the published output directory:
-
-```bash
-# Live coordinator log (shows submissions, retries, and 5-minute status polls)
-tail -f Results_final/eQTL/AIN76_only/07_permutation_testing/{prefix}_coordinator_log.txt
-
-# Per-batch SLURM job logs
-ls Results_final/eQTL/AIN76_only/07_permutation_testing/coordinator_job_logs/
-
-# Check SLURM queue for active batch workers
-squeue -u dawson.budke | grep perm_
-```
-
-**Aggregating after coordinator completion**
-
-When the coordinator finishes, it writes a `COORDINATOR_COMPLETE` sentinel file, which automatically triggers `PERM_AGGREGATE` within the same Nextflow run. If for any reason aggregation needs to be run separately after the coordinator has already finished:
-
-```bash
-nextflow run main_resume.nf \
-  --resume_from perm_aggregate \
-  --study_prefix DOChln \
-  --analysis_type AIN76_only \
-  --study_type eQTL \
-  --lod_threshold 7.0 \
-  -profile standard
-```
-
 ### Development and Testing
 
 **Test Mode Execution**:
@@ -856,14 +821,32 @@ results/
 │   ├── {prefix}_high_priority_qtls.csv  # Exceptional QTLs (LOD ≥ 10)
 │   └── qtl_identification_report.txt
 ├── 09_visualize/                    # QTL visualization plots
-│   ├── chr1/                        # Chromosome 1 QTL plots
-│   │   └── {gene_id}_chr1_{pos}cM_LOD{lod}.png
-│   ├── chr2/                        # Chromosome 2 QTL plots
-│   │   └── {gene_id}_chr2_{pos}cM_LOD{lod}.png
+│   ├── viz_batch_qtls.csv           # QTLs with batch assignments
+│   ├── viz_setup_log.txt            # Setup report
+│   ├── chr1/
+│   │   ├── {phenotype}_chr1_{pos}Mb_LOD{lod}_lod.png
+│   │   ├── {phenotype}_chr1_{pos}Mb_LOD{lod}_coef_effects.png
+│   │   └── {phenotype}_chr1_{pos}Mb_LOD{lod}_blup_effects.png
 │   ├── ...                          # Additional chromosomes
-│   ├── chrX/                        # Chromosome X QTL plots
-│   │   └── {gene_id}_chrX_{pos}cM_LOD{lod}.png
+│   ├── chrX/
+│   │   └── {phenotype}_chrX_{pos}Mb_LOD{lod}_{type}.png
 │   └── visualization_report.txt     # Plot generation summary
+├── 10_timbr/                        # TIMBR allelic series analysis
+│   ├── {prefix}_timbr_qtls.csv      # QTLs filtered for TIMBR analysis
+│   ├── {prefix}_timbr_batch_map.tsv # Batch assignments
+│   ├── {prefix}_addcovar.rds        # Pre-computed covariate matrix
+│   ├── {prefix}_timbr_setup_log.txt # Setup log
+│   ├── {prefix}_timbr_master_summary.csv  # Master results table (all QTLs)
+│   ├── {prefix}_timbr_run_report.txt      # Run statistics and allele distribution
+│   ├── chr{N}/                      # Per-chromosome QTL subdirectories
+│   │   └── {phenotype}_chr{N}_{pos}Mb/
+│   │       ├── {phenotype}_chr{N}_{pos}Mb.rds   # Full TIMBR result object
+│   │       └── plots/
+│   │           ├── 01_haplotype_effects.png
+│   │           ├── 02_n_alleles_distribution.png
+│   │           ├── 03_top_allelic_series.png
+│   │           └── 04_allelic_series_vs_founder_effects.png
+│   └── ...
 └── pipeline_info/                   # Execution monitoring and reporting
     ├── execution_timeline.html      # Interactive execution timeline
     ├── execution_report.html        # Comprehensive resource usage report
