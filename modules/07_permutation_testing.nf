@@ -596,9 +596,12 @@ process PERM_AGGREGATE {
         }
 
         # Per-phenotype completeness check (vectorized)
+        # Strip study prefix and _batch_N.rds suffix to recover phenotype name.
+        # Two-step gsub avoids backreferences, which have tricky escaping in
+        # Nextflow/Groovy template strings.
         batch_basenames  <- basename(perm_files)
-        pheno_from_file  <- sub(paste0("^${study_prefix}_(.+)_batch_[0-9]+\\.rds$"), "\\\\1",
-                                batch_basenames)
+        pheno_from_file  <- gsub("_batch_[0-9]+\\\\.rds\$", "",
+                                 gsub(paste0("^${study_prefix}_"), "", batch_basenames))
         batch_counts     <- table(pheno_from_file)
         incomplete       <- names(batch_counts)[batch_counts < batches_per_pheno]
         missing_entirely <- setdiff(expected_phenos, names(batch_counts))
