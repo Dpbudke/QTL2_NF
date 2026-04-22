@@ -565,6 +565,64 @@ process PERM_AGGREGATE {
         stop("No permutation results to aggregate")
     }
 
+    # ── Completeness gate ─────────────────────────────────────────────────────
+    # Validate that all expected batch files are present before aggregating.
+    # Avoids silently producing an incomplete permutation matrix when the
+    # coordinator died mid-run and its orphaned SLURM jobs hadn't finished yet.
+    batches_per_pheno   <- 5L
+    phenotype_list_path <- file.path("${projectDir}", "${params.outdir}",
+                                     "07_permutation_testing",
+                                     paste0("${study_prefix}", "_phenotype_list.txt"))
+
+    if (file.exists(phenotype_list_path)) {
+        expected_phenos  <- readLines(phenotype_list_path)
+        expected_phenos  <- expected_phenos[nchar(trimws(expected_phenos)) > 0]
+        n_phenos         <- length(expected_phenos)
+        expected_n_files <- n_phenos * batches_per_pheno
+
+        log_message(paste("Phenotype list:", phenotype_list_path))
+        log_message(paste("Expected phenotypes:", n_phenos))
+        log_message(paste("Expected batch files (", n_phenos, "x", batches_per_pheno, "):", expected_n_files))
+
+        if (length(perm_files) < expected_n_files) {
+            missing_n <- expected_n_files - length(perm_files)
+            log_message(paste("ERROR:", missing_n, "of", expected_n_files, "batch files are missing."))
+            log_message("Permutation jobs are likely still running or some SLURM jobs failed.")
+            log_message("Check COORDINATOR_STATUS.txt and coordinator_job_logs/ for details.")
+            log_message("Re-run --resume_from perm_aggregate only after all batch jobs are confirmed complete.")
+            close(log_conn)
+            stop(paste0("Incomplete permutation data: ", length(perm_files), " of ", expected_n_files,
+                        " batch files present. Refusing to aggregate partial results."))
+        }
+
+        # Per-phenotype completeness check (vectorized)
+        batch_basenames  <- basename(perm_files)
+        pheno_from_file  <- sub(paste0("^${study_prefix}_(.+)_batch_[0-9]+\\.rds$"), "\\\\1",
+                                batch_basenames)
+        batch_counts     <- table(pheno_from_file)
+        incomplete       <- names(batch_counts)[batch_counts < batches_per_pheno]
+        missing_entirely <- setdiff(expected_phenos, names(batch_counts))
+        all_incomplete   <- union(incomplete, missing_entirely)
+
+        if (length(all_incomplete) > 0) {
+            log_message(paste("ERROR:", length(all_incomplete), "phenotypes have incomplete batch files:"))
+            for (p in head(all_incomplete, 20)) {
+                n_found <- if (p %in% names(batch_counts)) batch_counts[[p]] else 0L
+                log_message(paste0("  - ", p, " (", n_found, "/", batches_per_pheno, " batches)"))
+            }
+            if (length(all_incomplete) > 20)
+                log_message(paste("  ... and", length(all_incomplete) - 20, "more"))
+            close(log_conn)
+            stop(paste0(length(all_incomplete), " phenotypes have incomplete permutation batches."))
+        }
+
+        log_message(paste("Completeness check passed:", expected_n_files,
+                          "batch files present for all", n_phenos, "phenotypes"))
+    } else {
+        log_message(paste("WARNING: Phenotype list not found at:", phenotype_list_path))
+        log_message("Cannot validate batch completeness — proceeding anyway")
+    }
+
     log_message("Combining permutation matrices...")
 
     quiltR <- function(files) {

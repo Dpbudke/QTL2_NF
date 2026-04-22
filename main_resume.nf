@@ -633,8 +633,21 @@ workflow {
                 ? Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs for TIMBR"))
                 : ch_significant_qtls
 
+            // Gate TIMBR on Module 9 completion so visualization always finishes first.
+            // If Module 9 ran, use its validation_report as a dependency trigger by
+            // combining it with ch_filtered_cross2 and then dropping the report path.
+            // If Module 9 was skipped, pass ch_filtered_cross2 directly.
+            def ch_cross2_for_timbr
+            if (shouldRunStep('visualize', params.resume_from)) {
+                ch_cross2_for_timbr = VISUALIZE_QTLS.out.validation_report
+                    .combine(ch_filtered_cross2)
+                    .map { _report, cross2 -> cross2 }
+            } else {
+                ch_cross2_for_timbr = ch_filtered_cross2
+            }
+
             TIMBR_ANALYSIS(
-                ch_filtered_cross2,
+                ch_cross2_for_timbr,
                 ch_genoprob,
                 ch_genetic_map,
                 ch_sig_qtls_timbr,
