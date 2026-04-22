@@ -272,7 +272,8 @@ workflow {
             ch_phenotype_file,
             ch_study_prefix,
             Channel.value(effective_sample_filter ?: "null"),
-            Channel.value(effective_exclude_covariates ?: "null")
+            Channel.value(effective_exclude_covariates ?: "null"),
+            Channel.value(params.single_sex ?: "null")
         )
 
         ch_pheno = PHENOTYPE_PROCESS.out.pheno
