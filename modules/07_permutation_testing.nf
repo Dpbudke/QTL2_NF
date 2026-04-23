@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 // Permutation Testing Module - Coordinator Architecture
-// Design: Nextflow submits ONE long-lived SLURM coordinator job (7-day wall time).
+// Design: Nextflow submits ONE long-lived SLURM coordinator job (10-day wall time).
 // The coordinator manages all batch jobs internally via sbatch/sacct, handling
 // submission, monitoring, and retries — completely independent of the Nextflow
 // driver session. This prevents driver-death (e.g., VS_Code wall-time) from
@@ -84,7 +84,7 @@ process PERM_SETUP {
                       "hours (with 35 parallel batches)"))
     log_message("")
     log_message("=== COORDINATOR ARCHITECTURE ===")
-    log_message("One 7-day SLURM coordinator job manages all batch submissions.")
+    log_message("One 10-day SLURM coordinator job manages all batch submissions.")
     log_message("Independent of Nextflow driver session - survives any driver interruption.")
 
     writeLines(colnames(cross2\$pheno), "${study_prefix}_phenotype_list.txt")
@@ -98,7 +98,7 @@ process PERM_SETUP {
 
 
 process PERM_COORDINATOR {
-    tag "Coordinating all permutation batches (7-day SLURM job)"
+    tag "Coordinating all permutation batches (10-day SLURM job)"
     publishDir "${params.outdir}/07_permutation_testing", mode: 'copy'
 
     // No container — this process needs host SLURM tools (sbatch, sacct).
@@ -107,7 +107,7 @@ process PERM_COORDINATOR {
 
     cpus   1
     memory '4 GB'
-    time   '7d'
+    time   '10d'
     errorStrategy 'retry'
     maxRetries 0   // Internal retry logic handles batch failures
 
