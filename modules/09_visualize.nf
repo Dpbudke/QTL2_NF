@@ -202,7 +202,7 @@ process VISUALIZE_BATCH {
             plots_ok <- plots_ok + 1L
 
             # ── Define groups ─────────────────────────────────────────────────
-            # Restrict to samples present in alleleprobs — cross2$covar may contain
+            # Restrict to samples present in alleleprobs — cross2\$covar may contain
             # samples that were phenotyped but lack genotype data (absent from the
             # FinalReport chip files). Kinship and alleleprob only cover genotyped
             # samples, so subsetting with the full covar rownames causes
