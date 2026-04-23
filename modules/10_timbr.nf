@@ -81,14 +81,31 @@ process TIMBR_SETUP {
     # ── Pre-compute addcovar matrix ───────────────────────────────────────────
     if (!is.null(cross2\$covar) && ncol(cross2\$covar) > 0) {
         covar_data <- cross2\$covar
-        # Strip coat_color (categorical, not a proper covariate for model)
+        # Strip coat_color (genetic phenotype, not a covariate for the model)
         if ("coat_color" %in% colnames(covar_data)) {
             covar_data <- covar_data[, !colnames(covar_data) %in% "coat_color", drop = FALSE]
         }
-        covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
-        addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
-        setup_log <- c(setup_log, paste("✓ Addcovar matrix built:", nrow(addcovar), "samples x", ncol(addcovar), "columns"))
-        setup_log <- c(setup_log, paste("  Covariates:", paste(colnames(covar_data), collapse = ", ")))
+        # Remove constant covariates — model.matrix crashes with "contrasts can be
+        # applied only to factors with 2 or more levels" for single-level factors
+        # (e.g., Sex in an all-female or all-male study).
+        constant_cols <- sapply(covar_data, function(x) length(unique(na.omit(x))) < 2)
+        if (any(constant_cols)) {
+            setup_log <- c(setup_log, paste("  Removing constant covariate(s):", paste(names(which(constant_cols)), collapse = ", ")))
+            covar_data <- covar_data[, !constant_cols, drop = FALSE]
+        }
+        if (ncol(covar_data) > 0) {
+            covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
+            addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+            if (ncol(addcovar) == 0) addcovar <- NULL
+        } else {
+            addcovar <- NULL
+        }
+        if (!is.null(addcovar)) {
+            setup_log <- c(setup_log, paste("✓ Addcovar matrix built:", nrow(addcovar), "samples x", ncol(addcovar), "columns"))
+            setup_log <- c(setup_log, paste("  Covariates:", paste(colnames(covar_data), collapse = ", ")))
+        } else {
+            setup_log <- c(setup_log, "✓ No variable covariates after filtering — addcovar = NULL")
+        }
     } else {
         addcovar <- NULL
         setup_log <- c(setup_log, "✓ No covariates found — addcovar = NULL")

@@ -202,7 +202,13 @@ process VISUALIZE_BATCH {
             plots_ok <- plots_ok + 1L
 
             # ── Define groups ─────────────────────────────────────────────────
-            all_ids <- rownames(covar_data)
+            # Restrict to samples present in alleleprobs — cross2$covar may contain
+            # samples that were phenotyped but lack genotype data (absent from the
+            # FinalReport chip files). Kinship and alleleprob only cover genotyped
+            # samples, so subsetting with the full covar rownames causes
+            # "subscript out of bounds" on kinship[[chr]][ids, ids].
+            genotyped_ids <- rownames(alleleprobs[[names(alleleprobs)[1]]])
+            all_ids <- intersect(rownames(covar_data), genotyped_ids)
             if (do_stratify) {
                 groups <- list(full = list(ids = all_ids, label = "Full", ac = addcovar, ic = intcovar_mat))
                 for (dlvl in diet_levels) {
