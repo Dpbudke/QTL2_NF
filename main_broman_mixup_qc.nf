@@ -7,7 +7,7 @@
 nextflow.enable.dsl=2
 
 // Import the Broman mixup QC module
-include { BROMAN_MIXUP_QC } from './modules/broman_mixup_qc.nf'
+include { BROMAN_MIXUP_QC } from './modules/analyses/broman_mixup_qc.nf'
 
 // Main workflow
 workflow {

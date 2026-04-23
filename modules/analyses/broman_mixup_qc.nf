@@ -156,6 +156,15 @@ process BROMAN_MIXUP_QC {
 
     log_message(paste("Predicted expression matrix:", nrow(exp_expr), "samples x", ncol(exp_expr), "genes"))
 
+    # Align to common samples — obs_expr has all phenotyped samples (95) but
+    # exp_expr only covers genotyped samples (84); dist_betw_matrices requires
+    # a square matrix for get_self/get_best to work correctly.
+    common_samples <- intersect(rownames(obs_expr), rownames(exp_expr))
+    log_message(paste("Common samples for distance calculation:", length(common_samples),
+                      "(obs:", nrow(obs_expr), "pred:", nrow(exp_expr), ")"))
+    obs_expr <- obs_expr[common_samples, , drop=FALSE]
+    exp_expr <- exp_expr[common_samples, , drop=FALSE]
+
     # Calculate RMS distances
     log_message("Calculating RMS distances...")
     d_evg <- dist_betw_matrices(obs_expr, exp_expr)
