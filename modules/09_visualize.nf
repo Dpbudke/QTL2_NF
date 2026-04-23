@@ -100,8 +100,12 @@ process VISUALIZE_BATCH {
 
     addcovar <- NULL
     if (!is.null(covar_data) && ncol(covar_data) > 0) {
-        covar_formula <- paste("~", paste(colnames(covar_data), collapse = " + "))
-        addcovar <- model.matrix(as.formula(covar_formula), data = covar_data)[, -1, drop = FALSE]
+        variable_cols <- sapply(covar_data, function(x) length(unique(na.omit(x))) >= 2)
+        covar_for_model <- covar_data[, variable_cols, drop = FALSE]
+        if (ncol(covar_for_model) > 0) {
+            covar_formula <- paste("~", paste(colnames(covar_for_model), collapse = " + "))
+            addcovar <- model.matrix(as.formula(covar_formula), data = covar_for_model)[, -1, drop = FALSE]
+        }
     }
 
     do_stratify <- interactive_covar_name != "null" && interactive_covar_name != "" &&
@@ -114,6 +118,8 @@ process VISUALIZE_BATCH {
     if (do_stratify) {
         diet_levels  <- sort(unique(covar_data[[interactive_covar_name]]))
         non_int_cols <- setdiff(colnames(covar_data), interactive_covar_name)
+        non_int_cols <- non_int_cols[sapply(covar_data[, non_int_cols, drop = FALSE],
+                                            function(x) length(unique(na.omit(x))) >= 2)]
         if (length(non_int_cols) > 0) {
             sex_formula  <- paste("~", paste(non_int_cols, collapse = " + "))
             addcovar_sex <- model.matrix(as.formula(sex_formula), data = covar_data)[, -1, drop = FALSE]
