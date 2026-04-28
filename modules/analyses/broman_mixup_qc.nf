@@ -81,7 +81,12 @@ process BROMAN_MIXUP_QC {
         expr_data <- readRDS(expr_file)
     } else if (grepl("\\\\.csv\$", expr_file, ignore.case=TRUE)) {
         log_message("  Format: CSV file")
-        expr_df <- read.csv(expr_file, row.names=1, check.names=FALSE)
+        # Read header first to get column count; colClasses forces col 1 (sample IDs)
+        # to character so leading zeros (e.g. "003") are not stripped by R's type
+        # inference (which would convert "003" -> integer 3 -> character "3").
+        hdr_df <- read.csv(expr_file, nrows=0, row.names=1, check.names=FALSE)
+        col_classes_vec <- c("character", rep(NA, ncol(hdr_df)))
+        expr_df <- read.csv(expr_file, row.names=1, check.names=FALSE, colClasses=col_classes_vec)
         expr_data <- as.matrix(expr_df)
         log_message("  Converted CSV to matrix")
     } else {
