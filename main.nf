@@ -180,7 +180,7 @@ include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
 include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING } from './modules/07_permutation_testing.nf'
-include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
+include { FIND_PEAKS_CHR; GATHER_PEAKS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
@@ -364,10 +364,20 @@ workflow {
             Channel.value(params.chunks_per_batch)
         )
 
-        // MODULE 8: Significant QTL Identification
-        IDENTIFY_SIGNIFICANT_QTLS(
+        // MODULE 8: Significant QTL Identification (scatter-gather)
+        ch_chrs = Channel.of("1","2","3","4","5","6","7","8","9","10",
+                              "11","12","13","14","15","16","17","18","19","X")
+
+        FIND_PEAKS_CHR(
+            ch_chrs,
+            COMBINE_BATCH_RESULTS.out.scan_results.first(),
+            CHUNKED_PERMUTATION_TESTING.out.filtered_cross2.first(),
+            CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.first()
+        )
+
+        GATHER_PEAKS(
+            FIND_PEAKS_CHR.out.chr_peaks.collect(),
             CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
-            COMBINE_BATCH_RESULTS.out.scan_results,
             CHUNKED_PERMUTATION_TESTING.out.permutation_matrix,
             CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds,
             ch_study_prefix
@@ -377,7 +387,7 @@ workflow {
         if (params.study_type == 'eQTL') {
             log.info "Running eQTL cis/trans classification (study_type = eQTL)"
             CLASSIFY_CIS_TRANS_EQTLS(
-                IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+                GATHER_PEAKS.out.significant_qtls,
                 Channel.fromPath(params.gtf_file),
                 CHUNKED_PERMUTATION_TESTING.out.filtered_cross2
             )
@@ -387,20 +397,18 @@ workflow {
         }
 
         // MODULE 9: QTL Visualizations
-        // NOTE: This module generates individual PNG plots for significant QTLs
         log.info "Running QTL visualization (plot_coefCC for 99% significant QTLs)"
 
         VISUALIZE_QTLS(
             PREPARE_GENOME_SCAN_SETUP.out.alleleprob,
             COMBINE_BATCH_RESULTS.out.scan_results,
             CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            GATHER_PEAKS.out.significant_qtls,
             ch_study_prefix,
             PREPARE_GENOME_SCAN_SETUP.out.kinship_loco,
             Channel.value(effective_interactive_covar ?: "null")
         )
 
-        // Display results for Module 9
         VISUALIZE_QTLS.out.validation_report.view { "QTL visualization report: $it" }
 
         // MODULE 10: TIMBR Allelic Series Analysis
@@ -408,7 +416,7 @@ workflow {
             CHUNKED_PERMUTATION_TESTING.out.filtered_cross2,
             PREPARE_GENOME_SCAN_SETUP.out.genoprob,
             PREPARE_GENOME_SCAN_SETUP.out.genetic_map,
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls,
+            GATHER_PEAKS.out.significant_qtls,
             ch_study_prefix,
             Channel.value(params.timbr_sig_level),
             Channel.value(params.timbr_qtls_per_batch),
@@ -422,8 +430,8 @@ workflow {
         CHUNKED_PERMUTATION_TESTING.out.setup_log.view { "Permutation setup log: $it" }
         CHUNKED_PERMUTATION_TESTING.out.aggregation_log.view { "Permutation aggregation log: $it" }
         CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.view { "Significance thresholds: $it" }
-        IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
-        IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
+        GATHER_PEAKS.out.significant_qtls.view { "Significant QTLs identified: $it" }
+        GATHER_PEAKS.out.qtl_summary.view { "QTL summary report: $it" }
         
     } else {
         log.info "Skipping genotype processing - no FinalReport files specified"

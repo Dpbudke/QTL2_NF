@@ -190,7 +190,7 @@ include { PREPARE_GENOME_SCAN_SETUP } from './modules/05_prepare_genome_scan.nf'
 include { GENOME_SCAN_SETUP; GENOME_SCAN_BATCH; COMBINE_BATCH_RESULTS } from './modules/06_qtl_analysis.nf'
 include { FILTER_PEAKS_BY_REGION } from './modules/06b_filter_peaks_by_region.nf'
 include { CHUNKED_PERMUTATION_TESTING; PERM_AGGREGATE } from './modules/07_permutation_testing.nf'
-include { IDENTIFY_SIGNIFICANT_QTLS } from './modules/08_identify_significant_qtls.nf'
+include { FIND_PEAKS_CHR; GATHER_PEAKS } from './modules/08_identify_significant_qtls.nf'
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
@@ -574,22 +574,30 @@ workflow {
             CHUNKED_PERMUTATION_TESTING.out.permutation_thresholds.view { "Significance thresholds: $it" }
         }
 
-        // MODULE 8: Significant QTL Identification
+        // MODULE 8: Significant QTL Identification (scatter-gather)
+        // Channel.of() drives 20 parallel SLURM jobs (one per DO chromosome).
+        // Each job loads the full scan matrix and subsets to its chromosome internally.
+        // This avoids the glob/flatten/join pattern that was unreliable in resume mode.
         if (shouldRunStep('significant_qtls', params.resume_from)) {
-            IDENTIFY_SIGNIFICANT_QTLS(
+            ch_chrs = Channel.of("1","2","3","4","5","6","7","8","9","10",
+                                  "11","12","13","14","15","16","17","18","19","X")
+
+            FIND_PEAKS_CHR(ch_chrs, ch_scan_results.first(), ch_filtered_cross2.first(), ch_thresholds.first())
+
+            GATHER_PEAKS(
+                FIND_PEAKS_CHR.out.chr_peaks.collect(),
                 ch_filtered_cross2,
-                ch_scan_results,
                 ch_perm_results,
                 ch_thresholds,
                 ch_study_prefix
             )
 
-            IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls.view { "Significant QTLs identified: $it" }
-            IDENTIFY_SIGNIFICANT_QTLS.out.qtl_summary.view { "QTL summary report: $it" }
+            GATHER_PEAKS.out.significant_qtls.view { "Significant QTLs identified: $it" }
+            GATHER_PEAKS.out.qtl_summary.view { "QTL summary report: $it" }
 
-            ch_significant_qtls = IDENTIFY_SIGNIFICANT_QTLS.out.significant_qtls
+            ch_significant_qtls = GATHER_PEAKS.out.significant_qtls
         } else {
-            log.info "Skipping IDENTIFY_SIGNIFICANT_QTLS - loading from existing files"
+            log.info "Skipping QTL identification - loading from existing files"
             ch_significant_qtls = Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs"))
         }
 
