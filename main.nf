@@ -361,7 +361,8 @@ workflow {
             Channel.value(params.lod_threshold),
             Channel.value(params.run_perm_benchmark),
             Channel.value(params.perm_per_chunk),
-            Channel.value(params.chunks_per_batch)
+            Channel.value(params.chunks_per_batch),
+            Channel.value(effective_interactive_covar ?: "null")
         )
 
         // MODULE 8: Significant QTL Identification (scatter-gather)

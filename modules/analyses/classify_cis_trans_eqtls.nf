@@ -16,7 +16,7 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     path "eqtl_classification_report.html",  emit: report, optional: true
 
     script:
-    def cis_window_mb = params.cis_window_mb ?: 2.0
+    def cis_window_mb = params.cis_window_mb ?: 4.0
     """
     #!/usr/bin/env Rscript
 
