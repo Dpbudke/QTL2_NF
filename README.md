@@ -215,43 +215,76 @@ The module processes specially formatted CSV files with the following convention
 
 **Resources**: 4 CPUs, 16GB RAM, 30 minutes
 
-### Module 7: Coordinator-Based Permutation Testing (`07_permutation_testing.nf`)
-**Purpose**: Reliable permutation testing for large phenotype sets using a coordinator architecture that survives long-running HPC jobs without depending on the Nextflow driver session remaining active
+### Module 7: Two-Stage Coordinator-Based Permutation Testing (`07_permutation_testing.nf` + `07b_perm_coordinator.nf`)
+**Purpose**: Reliable, compute-efficient permutation testing for large phenotype sets using a two-stage screening architecture and SLURM coordinator jobs that survive Nextflow driver restarts
 
-**Architecture**: `PERM_SETUP → PERM_COORDINATOR → PERM_AGGREGATE`
+**Architecture**: `PERM_SETUP → PERM_COORDINATOR_SCREEN → PERM_AGGREGATE_SCREEN → PERM_COORDINATOR_FULL → PERM_AGGREGATE`
 
-The previous design submitted individual SLURM batch jobs directly through Nextflow's job manager. If the Nextflow driver process died (for example, when a VS Code session hit a 10-hour wall time), all job monitoring stopped mid-run. The coordinator architecture eliminates this failure mode.
+The two-stage design follows the approach described in Huda et al. 2020 and Keller et al. 2018. Stage 1 runs a fast screen to identify phenotypes with plausible QTL signals; only those screen-passers proceed to the full 1,000-permutation stage. This reduces total compute by approximately 50-70% compared to running 1,000 permutations on every phenotype above the LOD pre-filter, and it makes interactive-covariate permutation (which must match the `scan1` parameterization of Module 6) tractable at scale.
 
-**Process: PERM_SETUP**
-- Loads the full cross2 object and filters it to the phenotypes that passed the LOD threshold from Module 6 (or regional filtering from Module 6b)
-- Writes the filtered cross2 object and the phenotype list to the published output directory
-- Calculates and logs the full batch configuration: 200 permutations × 5 batches per phenotype = 1,000 total permutations per phenotype
+**Background: Why Two Stages Are Necessary**
 
-**Process: PERM_COORDINATOR**
-- A **single SLURM job with a 7-day wall time** (1 CPU, 4 GB) that runs without a container so it has access to host SLURM tools (`sbatch`, `sacct`)
-- Writes the shared R worker script (`perm_batch_worker.R`) to the published directory so all compute nodes can access it over the shared filesystem
-- Submits all permutation batch jobs directly via `sbatch` (48 CPUs, 200 GB, 2-hour wall time per batch job)
-- Each batch worker runs inside the Singularity container: `apptainer exec --bind /project:/project singularity_cache/dpbudke-qtl2-pipeline-latest.img`
-- Polls job status every 5 minutes via `sacct` and retries failed batches up to 2 times automatically
-- Has internal resume logic: skips any batch whose output file already exists and is non-empty
-- Writes a `COORDINATOR_COMPLETE` sentinel file when all batches finish, which triggers `PERM_AGGREGATE`
-- Because the coordinator is itself a 7-day SLURM job, it is completely independent of the Nextflow driver session; driver interruption does not stop the batch work
+When `--interactive_covar` is set (e.g., `Diet_interactive` runs), `scan1` uses both `addcovar` and `intcovar`. Permutation thresholds must be derived from `scan1perm` called with the same model; running additive-only permutations against an interactive-model scan produces a mismatched null distribution and inflated trans-eQTL counts. The two-stage approach makes the correctly-parameterized interactive permutation computationally feasible by first discarding phenotypes whose observed LOD cannot plausibly be significant.
 
-**Process: PERM_AGGREGATE**
-- Triggered by the `COORDINATOR_COMPLETE` sentinel file
-- Reads batch result files directly from the published batch directory on the shared filesystem rather than staging them as Nextflow inputs (avoids staging thousands of individual files)
-- Combines all batch permutation matrices into a single 1,000-permutation-per-phenotype result matrix
-- Calculates multi-level empirical significance thresholds (63%, 90%, 95%, 99% quantiles)
-- Writes the list of phenotypes passing the LOD threshold at the 99% level for use in Module 8
+**Stage 1 — SCREEN (50 perms × 1 batch × all filtered phenotypes)**
+
+- Each phenotype receives exactly 50 permutations run in a single batch job (48 CPUs, 200 GB, 2 h)
+- `scan1perm` uses the same `addcovar`/`intcovar` split as Module 6
+- After all screen batches finish, `PERM_AGGREGATE_SCREEN` computes a **conservative threshold** per phenotype: `quantile(perms, 0.90) − bootstrap_SE(q90)`
+  - Bootstrap SE uses 1,000 resamples of the 50-perm distribution (more robust than the Cox-Hinkley closed-form at `n=50` in the tail)
+- Phenotypes whose **observed maximum LOD** from Module 6 (`scan_results.rds`) exceeds their conservative threshold are designated **screen-passers**; all others are excluded from further permutation testing
+- Typical screen pass rates of 30-50% are expected (Huda et al. 2020)
+
+**Stage 2 — FULL (200 perms × 5 batches × screen-passers = 1,000 total perms per phenotype)**
+
+- Each screen-passer receives five batch jobs of 200 permutations each (48 CPUs, 200 GB, 2 h per batch)
+- `PERM_AGGREGATE` combines the 5 × 200-perm matrices into a 1,000-permutation matrix per phenotype
+- Final 4-quantile thresholds (63%, 90%, 95%, 99%) are written to `permThresh.rds` for screen-passers only
+- Screen-failures are excluded from `permThresh.rds` and from Module 8 significance testing
+
+**Coordinator Architecture (shared between both stages)**
+
+Both `PERM_COORDINATOR_SCREEN` and `PERM_COORDINATOR_FULL` are aliased imports of a single parameterized process defined in `07b_perm_coordinator.nf`:
+
+```nextflow
+include {
+    PERM_COORDINATOR as PERM_COORDINATOR_SCREEN;
+    PERM_COORDINATOR as PERM_COORDINATOR_FULL
+} from './07b_perm_coordinator.nf'
+```
+
+Each coordinator instance:
+- Runs as a **single SLURM job with a 30-day wall time** (1 CPU, 4 GB) without a container, so it retains access to host SLURM tools (`sbatch`, `squeue`)
+- Writes a stage-specific R worker script (`perm_batch_worker_screen.R` or `perm_batch_worker_full.R`) and SLURM array worker (`perm_array_worker_screen.sh` or `perm_array_worker_full.sh`) to the published directory
+- Submits batch worker jobs as SLURM array jobs (48 CPUs, 200 GB, 2 h each); each batch worker runs inside the Singularity container via `apptainer exec --bind /project:/project singularity_cache/dpbudke-qtl2-pipeline-latest.img`
+- Polls job status every 5 minutes via `squeue` and retries failed batches up to 2 times automatically
+- Has internal resume logic: skips any batch whose output `.rds` file already exists and is non-empty
+- Writes a stage-specific sentinel file (`COORDINATOR_screen_COMPLETE` or `COORDINATOR_full_COMPLETE`) when all batches for that stage complete, which triggers the corresponding aggregation step
+- Because each coordinator is itself a long-lived SLURM job, it is completely independent of the Nextflow driver session; driver interruption does not stop batch work
+
+**Resume Logic (five cases)**
+
+The workflow detects prior progress by checking for on-disk artifacts in priority order:
+
+| Case | Condition | Action |
+|------|-----------|--------|
+| A | `{prefix}_fullPerm.rds` exists | Skip all permutation steps |
+| B | `COORDINATOR_full_COMPLETE` exists | Run `PERM_AGGREGATE` only |
+| C | `{prefix}_screen_passers.txt` exists | Run `PERM_COORDINATOR_FULL → PERM_AGGREGATE` |
+| D | `COORDINATOR_screen_COMPLETE` exists | Run `PERM_AGGREGATE_SCREEN → PERM_COORDINATOR_FULL → PERM_AGGREGATE` |
+| E | Fresh | Run full five-step flow |
 
 **Key Properties**:
-- **Fork-based parallelism**: Each batch worker uses `scan1perm()` with `cores=48` and fork (not PSOCK), which is efficient on Linux
-- **Automatic resume**: The coordinator skips batches whose output files already exist; re-submitting the coordinator job after an interruption safely continues from where work left off
-- **Error handling**: Batches in FAILED, TIMEOUT, CANCELLED, NODE_FAIL, or OUT_OF_MEMORY states are retried up to 2 times; permanently failed batches are logged and the coordinator exits with a non-zero status
+- **Matched null distribution**: `scan1perm` uses the same `addcovar`/`intcovar` split as `scan1` in Module 6; interactive-covariate permutations are propagated correctly through both coordinator stages
+- **Fork-based parallelism**: Each batch worker calls `scan1perm()` with `cores=48` using fork (not PSOCK), which is efficient on Linux
+- **Automatic batch-level resume**: Each coordinator skips batches whose output `.rds` files already exist; re-running the coordinator after an interruption safely continues from where work left off
+- **Error handling**: Batches are retried up to 2 times; permanently failed batches are logged and the coordinator exits with a non-zero status
 
-**Efficiency Achievement**: LOD threshold of 7.0 typically reduces the permutation phenotype set by 70-90% relative to the full scan; regional filtering (Module 6b) can achieve 95-98% reduction
+**Performance**: Estimated 10-15 days wall time at 40 concurrent SLURM slots (vs. ~28 days for the previous single-stage 1,000-perm approach), assuming a 30-50% screen pass rate
 
-**Resources**: Setup (4 CPUs, 32 GB, 10 min), Coordinator (1 CPU, 4 GB, 7-day wall time), Batch Workers (48 CPUs, 200 GB, 2 h each), Aggregation (4 CPUs, 32 GB, 1 h)
+**Efficiency**: LOD pre-filter (Module 6) typically reduces the candidate phenotype set by 70-90%; the screen stage then reduces it by a further 50-70%; regional filtering (Module 6b) can achieve 95-98% reduction
+
+**Resources**: PERM_SETUP (4 CPUs, 32 GB, 10 min), PERM_COORDINATOR_SCREEN/FULL (1 CPU, 4 GB, 30-day wall time each), Batch Workers (48 CPUs, 200 GB, 2 h each), PERM_AGGREGATE_SCREEN (4 CPUs, 32 GB, 1 h), PERM_AGGREGATE (4 CPUs, 32 GB, 1 h)
 
 ### Module 8: Significant QTL Identification (`08_identify_significant_qtls.nf`)
 **Purpose**: Statistical QTL calling using empirical permutation thresholds with multi-level significance classification
@@ -669,13 +702,14 @@ nextflow run main_resume.nf \
   --lod_threshold 7.0
 
 # Resume from permutation testing (after scan completion)
-# NOTE: For permutation runs, prefer submitting via sbatch wrapper — see "Running Permutation Testing" below
+# The workflow auto-detects which stage is complete and resumes from the right point
+# (see five-case resume logic in the Module 7 section)
 nextflow run main_resume.nf \
   --resume_from permutation \
   --study_prefix DOchln \
   --lod_threshold 7.0
 
-# Resume only the PERM_AGGREGATE step after all coordinator batches have finished
+# Resume only the final PERM_AGGREGATE step after COORDINATOR_full_COMPLETE is on disk
 nextflow run main_resume.nf \
   --resume_from perm_aggregate \
   --study_prefix DOchln \
@@ -695,13 +729,13 @@ nextflow run main_resume.nf \
 - `prepare_scan` - Start from genome scan preparation (genotype probabilities)
 - `genome_scan` - Start from HPC batch genome scanning and peak detection
 - `regional_filter` - Start from regional QTL filtering (requires `--qtl_region`)
-- `permutation` - Start from permutation testing (runs full PERM_SETUP → PERM_COORDINATOR → PERM_AGGREGATE)
-- `perm_aggregate` - Run only PERM_AGGREGATE, reading completed batch files from the published batch directory; use this when the coordinator has finished but the aggregation step failed or was not yet run
+- `permutation` - Start from permutation testing; the workflow auto-detects which stage is complete (five-case logic: fullPerm.rds done → skip all; COORDINATOR_full_COMPLETE → aggregate only; screen_passers.txt → stage 2 + aggregate; COORDINATOR_screen_COMPLETE → screen aggregate + stage 2 + aggregate; fresh → full two-stage flow)
+- `perm_aggregate` - Run only the final PERM_AGGREGATE step; use when `COORDINATOR_full_COMPLETE` is on disk but the aggregation step failed or was not yet run; reads batch files directly from `07_permutation_testing/batches_full/`
 - `significant_qtls` - Start from significant QTL identification and summarization
 - `visualize` - Start from QTL visualization (plot_coefCC for 99% significant QTLs)
 - `timbr` - Start from TIMBR allelic series analysis
 
-**Note on `perm_aggregate`**: This resume case passes the phenotype list file as a trigger rather than staging thousands of batch files as Nextflow inputs. `PERM_AGGREGATE` reads batch files directly from the published `07_permutation_testing/batches/` directory on the shared filesystem.
+**Note on `perm_aggregate`**: This resume case triggers the final `PERM_AGGREGATE` step only. It expects `COORDINATOR_full_COMPLETE` to be present on disk and reads stage 2 batch files directly from the published `07_permutation_testing/batches_full/` directory, validated against `{prefix}_screen_passers.txt`. Use this when stage 2 coordinator jobs have all completed but the aggregation step failed or was interrupted.
 
 ### Development and Testing
 
@@ -798,23 +832,32 @@ results/
 │   ├── {prefix}_regional_filtered_phenotypes.txt  # Phenotypes in target region(s)
 │   ├── {prefix}_filtered_peaks.csv          # Peaks with gene location annotations
 │   └── {prefix}_regional_filtering_report.txt  # Filtering statistics and workload reduction
-├── 07_permutation_testing/          # Coordinator-based permutation testing
-│   ├── batches/                     # Individual batch permutation results (written by batch workers)
-│   │   ├── {prefix}_{phenotype}_batch_1.rds  # Permutation batch 1 for each phenotype
-│   │   ├── {prefix}_{phenotype}_batch_2.rds  # Permutation batch 2 for each phenotype
-│   │   └── ...                               # 5 batches × N phenotypes (200 perms each = 1000 total)
-│   ├── coordinator_job_logs/        # Per-batch SLURM job stdout/stderr logs
-│   │   └── {prefix}_{phenotype}_b{N}.log     # Log from each individual batch worker job
-│   ├── perm_batch_worker.R          # Shared R worker script written by coordinator
-│   ├── {prefix}_coordinator_log.txt # Coordinator progress log (submissions, retries, completion)
-│   ├── COORDINATOR_COMPLETE         # Sentinel file written when all batches finish
+├── 07_permutation_testing/          # Two-stage coordinator-based permutation testing
+│   ├── batches_screen/              # Stage 1 batch results (50 perms × 1 batch per phenotype)
+│   │   └── {prefix}_{phenotype}_batch_1.rds  # Single screen batch per phenotype
+│   ├── batches_full/                # Stage 2 batch results (200 perms × 5 batches per screen-passer)
+│   │   ├── {prefix}_{phenotype}_batch_1.rds
+│   │   ├── {prefix}_{phenotype}_batch_2.rds
+│   │   └── ...                               # 5 batches × N screen-passers (1000 total perms per pheno)
+│   ├── coordinator_job_logs_screen/ # Per-batch SLURM stdout/stderr logs for stage 1
+│   ├── coordinator_job_logs_full/   # Per-batch SLURM stdout/stderr logs for stage 2
+│   ├── perm_batch_worker_screen.R   # Stage 1 R worker script written by PERM_COORDINATOR_SCREEN
+│   ├── perm_batch_worker_full.R     # Stage 2 R worker script written by PERM_COORDINATOR_FULL
+│   ├── {prefix}_screen_coordinator_log.txt  # Stage 1 coordinator progress log
+│   ├── {prefix}_full_coordinator_log.txt    # Stage 2 coordinator progress log
+│   ├── COORDINATOR_screen_COMPLETE  # Sentinel: all stage 1 batches finished
+│   ├── COORDINATOR_full_COMPLETE    # Sentinel: all stage 2 batches finished
 │   ├── {prefix}_filtered_cross2.rds # Phenotype-filtered cross2 object (from PERM_SETUP)
-│   ├── {prefix}_phenotype_list.txt  # List of phenotypes submitted for permutation
+│   ├── {prefix}_phenotype_list.txt  # All phenotypes entering stage 1 (from PERM_SETUP)
 │   ├── {prefix}_setup_log.txt       # Permutation setup log
-│   ├── {prefix}_fullPerm.rds        # Complete permutation matrix (1000 perms × N phenotypes)
-│   ├── {prefix}_permThresh.rds      # Multi-level significance thresholds (63%, 90%, 95%, 99%)
-│   ├── {prefix}_filtered_phenotypes_lod{threshold}.txt  # Phenotypes passing final threshold
-│   └── {prefix}_aggregation_log.txt # Permutation aggregation log
+│   ├── {prefix}_screen_perms.rds    # Stage 1 combined perm matrix (50 perms × all phenos)
+│   ├── {prefix}_screen_thresholds.rds  # Per-phenotype q90, bootstrap SE, conservative threshold, pass/fail
+│   ├── {prefix}_screen_passers.txt  # Phenotypes that passed the stage 1 screen
+│   ├── {prefix}_screen_aggregation_log.txt  # Stage 1 aggregation log
+│   ├── {prefix}_fullPerm.rds        # Stage 2 combined perm matrix (1000 perms × N screen-passers)
+│   ├── {prefix}_permThresh.rds      # Multi-level thresholds (63%, 90%, 95%, 99%) for screen-passers only
+│   ├── {prefix}_filtered_phenotypes_lod{threshold}.txt  # Screen-passers above LOD at 99%
+│   └── {prefix}_aggregation_log.txt # Stage 2 aggregation log
 ├── 08_significant_qtls/             # Final QTL identification and analysis
 │   ├── {prefix}_significant_qtls.csv    # Comprehensive significant QTL list
 │   ├── {prefix}_qtl_summary.txt     # Summary statistics and distributions

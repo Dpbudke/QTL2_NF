@@ -106,7 +106,7 @@ Classifies significant eQTLs as **cis-acting** (local) or **trans-acting** (dist
 
 3. **Classification Rules**:
    - **cis**: QTL and gene on same chromosome AND distance ≤ cis_window_mb from TSS
-     - Default: 2 Mb on each side = 4 Mb total window
+     - Default: 4 Mb on each side = 8 Mb total window (consistent with Keller et al. 2018)
    - **trans**: QTL and gene on different chromosomes OR distance > cis_window_mb
    - **unknown_gene**: Gene ID not found in GTF annotation
 
@@ -117,7 +117,7 @@ Classifies significant eQTLs as **cis-acting** (local) or **trans-acting** (dist
 nextflow run workflow_cis_trans_classification.nf \
     --qtl_file Results_final/results/08_significant_qtls/DOchln_significant_qtls.csv \
     --gtf_file Data/Mus_musculus.GRCm39.113.gtf.gz \
-    --cis_window_mb 2.0 \
+    --cis_window_mb 4.0 \
     --outdir results_cis_trans \
     -profile standard
 ```
@@ -140,7 +140,7 @@ workflow {
 |-----------|------|---------|-------------|
 | `qtl_file` | Path | Required | Path to significant QTLs CSV file |
 | `gtf_file` | Path | Required | Path to GTF annotation file (can be gzipped) |
-| `cis_window_mb` | Float | 2.0 | Distance threshold in Mb for cis classification (creates 4 Mb total window: +/- 2 Mb from TSS) |
+| `cis_window_mb` | Float | 4.0 | Distance threshold in Mb for cis classification (creates 8 Mb total window: +/- 4 Mb from TSS; consistent with Keller et al. 2018) |
 | `outdir` | Path | results_cis_trans | Output directory |
 
 ### Input Files
@@ -184,7 +184,7 @@ eQTL CIS vs TRANS CLASSIFICATION SUMMARY
 ===========================================
 
 Analysis Parameters:
-  Cis window: +/- 2 Mb from TSS (4 Mb total window)
+  Cis window: +/- 4 Mb from TSS (8 Mb total window)
   Total QTLs analyzed: 1245
 
 Classification Results:
@@ -204,4 +204,4 @@ Classification Results:
 ### References
 
 - Classic definition: cis-eQTLs within 1-5 Mb of gene TSS
-- Commonly used threshold: 2 Mb (adjustable via `cis_window_mb` parameter)
+- Pipeline default: 4 Mb (±4 Mb = 8 Mb total window), consistent with Keller et al. 2018; adjustable via `cis_window_mb` parameter
