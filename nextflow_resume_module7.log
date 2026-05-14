@@ -1,0 +1,244 @@
+[33mNextflow 26.04.0 is available - Please consider updating your version to it(B[m
+
+ N E X T F L O W   ~  version 25.04.6
+
+Launching `main_resume.nf` [awesome_maxwell] DSL2 - revision: 95add10c68
+
+Analysis type: Diet_interactive (full cohort, GxE interaction with Diet)
+
+Auto-configured settings for Diet_interactive:
+    outdir             : Results_final/eQTL/Diet_interactive
+    resume_from        : permutation
+    sample_filter      : null (full cohort)
+    exclude_covariates : null
+    interactive_covar  : Diet
+
+
+========================================
+ QTL2_NF Pipeline Started
+========================================
+study_prefix   : DOchln
+input_dir      : Results_final/eQTL/Diet_interactive
+outdir         : Results_final/eQTL/Diet_interactive
+resume_from    : permutation
+lod_threshold  : 7.0
+========================================
+
+Skipping PHENOTYPE_PROCESS - loading from existing files
+Skipping GENERATE_CONTROL_FILE - loading from existing files
+Skipping CREATE_CROSS2_OBJECT - loading from existing files
+Skipping GENOME_SCAN_BATCH - loading from existing files
+No regional filtering applied - using all LOD-filtered phenotypes
+Running CHUNKED_PERMUTATION_TESTING (DO_Pipe approach)
+WARN: Access to undefined parameter `perm_per_chunk` -- Initialise it to a default value eg. `params.perm_per_chunk = some_value`
+WARN: Access to undefined parameter `chunks_per_batch` -- Initialise it to a default value eg. `params.chunks_per_batch = some_value`
+[-        ] CHU…UTATION_TESTING:PERM_SETUP -
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN -
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+
+[-        ] CHU…UTATION_TESTING:PERM_SETUP -
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN -
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+
+[-        ] CHU…UTATION_TESTING:PERM_SETUP -
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN -
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+
+[-        ] CHU…UTATION_TESTING:PERM_SETUP -
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN -
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+[-        ] CHU…UTATION_TESTING:PERM_SETUP | 0 of 1
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN | 0 of 1
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+executor >  slurm (1)
+[1b/7c6af2] CHU…ng up permutation testing) | 0 of 1
+[-        ] CHU…TING:PERM_AGGREGATE_SCREEN | 0 of 1
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+executor >  slurm (2)
+[1b/7c6af2] CHU…ng up permutation testing) | 0 of 1
+[48/faf342] CHU…e 1 (screen) permutations) | 0 of 1
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+executor >  slurm (2)
+[1b/7c6af2] CHU…ng up permutation testing) | 0 of 1
+[48/faf342] CHU…e 1 (screen) permutations) | 0 of 1
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+Permutation setup log: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/1b/7c6af20af5e62bf5617f7c2481d3ce/DOchln_setup_log.txt
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+executor >  slurm (2)
+[1b/7c6af2] CHU…ng up permutation testing) | 1 of 1 ✔
+[48/faf342] CHU…e 1 (screen) permutations) | 0 of 1
+[-        ] CHU…TING:PERM_COORDINATOR_FULL -
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+COORDINATOR_screen_COMPLETE found — running PERM_AGGREGATE_SCREEN onward
+Running eQTL cis/trans classification (study_type = eQTL)
+Running QTL visualization (plot_coefCC for 99% significant QTLs)
+Permutation setup log: /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/1b/7c6af20af5e62bf5617f7c2481d3ce/DOchln_setup_log.txt
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+
+executor >  slurm (2)
+[1b/7c6af2] CHU…ng up permutation testing) | 1 of 1 ✔
+[48/faf342] CHU…e 1 (screen) permutations) | 1 of 1 ✔
+[-        ] CHU…TING:PERM_COORDINATOR_FULL | 0 of 1
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+
+
+
+
+
+
+
+executor >  slurm (3)
+[1b/7c6af2] CHU…ng up permutation testing) | 1 of 1 ✔
+[48/faf342] CHU…e 1 (screen) permutations) | 1 of 1 ✔
+[0e/004913] CHU…ations (30-day SLURM job)) | 0 of 1
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -
+
+
+
+
+
+
+
+executor >  slurm (3)
+[1b/7c6af2] CHU…ng up permutation testing) | 1 of 1 ✔
+[48/faf342] CHU…e 1 (screen) permutations) | 1 of 1 ✔
+[0e/004913] CHU…ations (30-day SLURM job)) | 0 of 1
+[-        ] CHU…ION_TESTING:PERM_AGGREGATE -
+[-        ] FIND_PEAKS_CHR                 -
+[-        ] GATHER_PEAKS                   -
+[-        ] CLASSIFY_CIS_TRANS_EQTLS       -
+[-        ] VISUALIZE_QTLS:VISUALIZE_SETUP -
+[-        ] VISUALIZE_QTLS:VISUALIZE_BATCH -
+[-        ] VIS…E_QTLS:VISUALIZE_AGGREGATE -
+[-        ] TIMBR_ANALYSIS:TIMBR_SETUP     -
+[-        ] TIMBR_ANALYSIS:TIMBR_BATCH     -
+[-        ] TIMBR_ANALYSIS:TIMBR_AGGREGATE -

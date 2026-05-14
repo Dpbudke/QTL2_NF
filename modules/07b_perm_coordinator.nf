@@ -116,7 +116,7 @@ out_file  <- file.path(batch_dir,
                         paste0(study_pfx, "_", pheno, "_batch_", batch_num, ".rds"))
 
 # Skip if already done (handles duplicate submissions on restart)
-if (file.exists(out_file) && file.size(out_file) > 1000) {
+if (file.exists(out_file) && file.size(out_file) > 100) {
     cat("Output already exists, skipping:", out_file, "\\n")
     quit(status = 0)
 }
@@ -240,7 +240,7 @@ RSCRIPT
     # ── Helpers ──────────────────────────────────────────────────────────────
     batch_done() {
         local F="\$1"
-        [[ -f "\${F}" ]] && [[ \$(stat -c%s "\${F}" 2>/dev/null || echo 0) -gt 1000 ]]
+        [[ -f "\${F}" ]] && [[ \$(stat -c%s "\${F}" 2>/dev/null || echo 0) -gt 100 ]]
     }
 
     count_done() {
@@ -436,5 +436,18 @@ ARRAYEOF
     log "ALL \${TOTAL_BATCHES} \${STAGE_LABEL} BATCHES COMPLETE"
     log "========================================================"
     echo "COORDINATOR_\${STAGE_LABEL}_COMPLETE" > COORDINATOR_\${STAGE_LABEL}_COMPLETE
+
+    # Eager-publish: copy completion signal + coordinator log directly to the
+    # published results dir. Nextflow's publishDir requires the driver to be
+    # alive at process exit; if the driver died during this 30-day run, these
+    # files would otherwise be stranded in the work dir and the next resume
+    # would not detect the stage as complete. Workers/manifests/batches/status
+    # are already written directly into PERM_DIR, so this closes the only gap.
+    cp -f "COORDINATOR_\${STAGE_LABEL}_COMPLETE" "\${PERM_DIR}/" 2>/dev/null && \
+        log "Eager-published COORDINATOR_\${STAGE_LABEL}_COMPLETE to \${PERM_DIR}/" || \
+        log "WARNING: failed to eager-publish COORDINATOR_\${STAGE_LABEL}_COMPLETE"
+    cp -f "\${LOG}" "\${PERM_DIR}/" 2>/dev/null && \
+        log "Eager-published \${LOG} to \${PERM_DIR}/" || \
+        log "WARNING: failed to eager-publish \${LOG}"
     """
 }
