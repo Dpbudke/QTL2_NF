@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 // Parameterized permutation coordinator
-// Runs as a single long-lived SLURM job (30-day wall time) that submits
+// Runs as a single long-lived SLURM job (21-day wall time) that submits
 // and monitors batch worker jobs for one stage of the two-stage permutation flow.
 //
 // Two callers (in modules/07_permutation_testing.nf):
@@ -12,7 +12,7 @@
 // and completion signal (COORDINATOR_${stage_label}_COMPLETE).
 
 process PERM_COORDINATOR {
-    tag "Coordinating ${stage_label} permutations (30-day SLURM job)"
+    tag "Coordinating ${stage_label} permutations (21-day SLURM job)"
     publishDir "${params.outdir}/07_permutation_testing", mode: 'copy'
 
     // No container — this process needs host SLURM tools (sbatch, sacct).
@@ -20,7 +20,7 @@ process PERM_COORDINATOR {
 
     cpus   1
     memory '4 GB'
-    time   '30d'
+    time   '21d'
     errorStrategy 'retry'
     maxRetries 0
 
