@@ -489,6 +489,39 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 
 **Resources**: 8 CPUs, 64GB RAM, 4 hours
 
+### Optional: Classify cis vs trans eQTLs (`classify_cis_trans_eqtls.nf`)
+**Purpose**: Annotate significant eQTLs from Module 8 as *cis* (local) or *trans* (distal) by comparing each QTL peak position to its target gene's transcription start site (TSS)
+
+**Trigger**: Runs automatically when `params.study_type == 'eQTL'`; skipped for non-eQTL studies
+
+**Process Workflow**:
+1. Load significant QTLs (`GATHER_PEAKS` output) and the filtered cross2 object
+2. Convert QTL peak positions from cM → Mb using each chromosome's gmap/pmap (saved as `qtl2_position_map.rds` for reuse)
+3. Parse Ensembl GTF (`params.gtf_file`) for gene records and compute strand-aware TSS (start for `+`, end for `-`)
+4. Join QTLs to genes by `lodcolumn` (gene_id) and compute `distance_to_tss_mb`
+5. Classify each QTL:
+   - **cis**: same chromosome as gene AND `|QTL_pos − TSS| ≤ params.cis_window_mb`
+   - **trans**: same chromosome but outside window, or different chromosome
+   - **unknown_gene**: `lodcolumn` not found in GTF
+6. Emit per-QTL classification CSV plus summary statistics by `eqtl_type` and significance level
+
+**Input Requirements**:
+- Significant QTLs CSV (from Module 8)
+- Cross2 RDS (from `CHUNKED_PERMUTATION_TESTING.out.filtered_cross2`)
+- Gzipped Ensembl GTF (`params.gtf_file`, default `Data/Mus_musculus.GRCm39.113.gtf.gz`)
+
+**Output Files** (`results/00_analyses/`):
+- **eqtl_cis_trans_classification.csv**: Per-QTL annotation with `qtl_chr`, `qtl_pos_cM`, `qtl_pos_mb`, `gene_chr`, `gene_tss`, `gene_tss_mb`, `distance_to_tss_mb`, `eqtl_type`, plus LOD/CI/significance columns
+- **eqtl_classification_summary.txt**: Counts, mean LOD, median distance per `eqtl_type`, plus cross-tabulation by significance level
+- **qtl2_position_map.rds**: Reusable gmap/pmap list for downstream cM↔Mb conversion
+
+**Key Parameter**:
+- `--cis_window_mb` (default: **4.0**): Half-width of the cis window; QTL within ±`cis_window_mb` of the gene's TSS on the same chromosome is called *cis*
+
+**Usage**: Triggered automatically by Module 8 when `--study_type eQTL` is set; no separate invocation required
+
+**Resources**: Inherits default process resources (lightweight R job, runs in minutes)
+
 ## Installation and Setup
 
 ### Quick Setup
