@@ -14,8 +14,8 @@ QTL2_NF is a comprehensive bioinformatics pipeline that processes phenotype and 
 ### Phenotype File Format
 The pipeline requires a specially formatted CSV file with header row indicators. This standardized format enables automated parsing and supports diverse phenotype types from clinical measurements to high-dimensional molecular data:
 
-**File Structure Requirements**:
-The pipeline uses a specialized CSV format that facilitates automated parsing of metadata and phenotype information:
+**File Structure Requirements**
+Defined in preparatory R Markdown workflow (`Metadata_phenotype_QTL2_NF.Rmd`)
 
 - **Row 1**: Column type indicators
   - Column A: empty (reserved for sample IDs)
@@ -89,7 +89,7 @@ For molecular phenotypes (eQTL, mQTL analyses), the preparatory R Markdown workf
 
 ## Pipeline Architecture
 
-The pipeline consists of 9 numbered modules (plus optional Module 6b) organized into a sequential workflow that matches the results directory structure. This modular design enables precise resume capabilities and optimal resource allocation for large-scale QTL analysis:
+The pipeline consists of 10 numbered modules (plus optional Module 6b) organized into a sequential workflow that matches the results directory structure. This modular design enables precise resume capabilities and optimal resource allocation for large-scale QTL analysis:
 
 ### Module 1: Phenotype Processing (`01_phenotype_process.nf`)
 **Purpose**: Comprehensive validation and preparation of phenotype/covariate data according to r/qtl2 specifications with robust support for diverse molecular data types and experimental designs
@@ -254,7 +254,7 @@ include {
 ```
 
 Each coordinator instance:
-- Runs as a **single SLURM job with a 30-day wall time** (1 CPU, 4 GB) without a container, so it retains access to host SLURM tools (`sbatch`, `squeue`)
+- Runs as a **single SLURM job with a 21-day wall time** (1 CPU, 4 GB) without a container, so it retains access to host SLURM tools (`sbatch`, `squeue`)
 - Writes a stage-specific R worker script (`perm_batch_worker_screen.R` or `perm_batch_worker_full.R`) and SLURM array worker (`perm_array_worker_screen.sh` or `perm_array_worker_full.sh`) to the published directory
 - Submits batch worker jobs as SLURM array jobs (48 CPUs, 200 GB, 2 h each); each batch worker runs inside the Singularity container via `apptainer exec --bind /project:/project singularity_cache/dpbudke-qtl2-pipeline-latest.img`
 - Polls job status every 5 minutes via `squeue` and retries failed batches up to 2 times automatically
@@ -567,6 +567,7 @@ All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable
 ```bash
 # Configure HPC settings
 # Edit nextflow.config to match your SLURM account and resource allocations
+# Update "Pipeline-level email notifications" email address 
 ```
 
 2. **Data Preparation**:
@@ -772,7 +773,7 @@ nextflow run main_resume.nf \
 
 ### Development and Testing
 
-**Test Mode Execution**:
+**Positive Control Test Execution: test-mode**:
 ```bash
 # Positive control: chromosome 2 coat color validation
 nextflow run main.nf \
