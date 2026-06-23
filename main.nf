@@ -133,7 +133,7 @@ def effective_outdir = params.outdir ?:
         : 'results')
 
 def effective_sample_filter = params.sample_filter ?: (
-    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76a"]}' :
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76", "ain76a"]}' :
     params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
 )
 
@@ -184,6 +184,7 @@ include { FIND_PEAKS_CHR; GATHER_PEAKS } from './modules/08_identify_significant
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
+include { PLOT_EQTL_MAP } from './modules/analyses/plot_eqtl_map.nf'
 
 /*
 ========================================================================================
@@ -393,6 +394,13 @@ workflow {
                 CHUNKED_PERMUTATION_TESTING.out.filtered_cross2
             )
             CLASSIFY_CIS_TRANS_EQTLS.out.summary.view { "eQTL classification summary: $it" }
+
+            // Genome-wide eQTL map (cis = blue diagonal, trans off-diagonal)
+            PLOT_EQTL_MAP(
+                CLASSIFY_CIS_TRANS_EQTLS.out.classification,
+                CLASSIFY_CIS_TRANS_EQTLS.out.position_map,
+                ch_study_prefix
+            )
         } else {
             log.info "Skipping eQTL classification (study_type = ${params.study_type})"
         }

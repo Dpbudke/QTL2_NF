@@ -169,6 +169,11 @@ if (length(missing_cols) > 0) {
 
 validation_log <- c(validation_log, "✓ Successfully identified required columns")
 
+# Force Sample_ID to character. Bare-numeric IDs (single-project FinalReports) are
+# inferred as integer by fread, which would turn name-based strip_map lookups into
+# positional indexing downstream. Character typing keeps all sample matching by name.
+geno_data[[sample_col]] <- as.character(geno_data[[sample_col]])
+
 # ── Sample ID check stage ──────────────────────────────────────────────────
 # Strategy: use the original (pre-stripping) sample IDs from Module 1 to directly
 # match FinalReport sample IDs — no regex stripping, no cross-project ambiguity.
@@ -190,13 +195,23 @@ strip_map <- setNames(as.character(valid_samples), as.character(valid_samples_or
 original_samples <- unique(geno_data[[sample_col]])
 validation_log <- c(validation_log, paste("✓ Combined FinalReport data contains", length(original_samples), "unique samples"))
 
-# Direct intersection: FinalReport IDs vs original (non-stripped) phenotype IDs
-# This naturally excludes all samples from other projects without any regex logic
+# Match FinalReport IDs to phenotype IDs. Multi-project FinalReports carry a project
+# prefix (e.g. DOchln_1) and match valid_samples_original; single-project FinalReports
+# use bare IDs (e.g. 1) and match the stripped valid_samples. Try the prefixed form
+# first and fall back to the stripped form if it yields no matches.
 matched_original <- intersect(as.character(original_samples), as.character(valid_samples_original))
+if (length(matched_original) == 0) {
+    matched_original <- intersect(as.character(original_samples), as.character(valid_samples))
+    # FinalReport already uses stripped IDs — map stripped -> stripped (identity for naming)
+    strip_map <- setNames(as.character(valid_samples), as.character(valid_samples))
+    validation_log <- c(validation_log, "  Note: matched FinalReport IDs on stripped (bare numeric) sample IDs")
+} else {
+    validation_log <- c(validation_log, "  Note: matched FinalReport IDs on original (project-prefixed) sample IDs")
+}
 
 validation_log <- c(validation_log, "=== Sample Check Stage ===")
 validation_log <- c(validation_log, paste("  FinalReport samples:           ", length(original_samples)))
-validation_log <- c(validation_log, paste("  Valid samples (original IDs):  ", length(valid_samples_original)))
+validation_log <- c(validation_log, paste("  Valid samples:                 ", length(valid_samples_original)))
 validation_log <- c(validation_log, paste("  Matched (this project):        ", length(matched_original)))
 validation_log <- c(validation_log, paste("  Excluded (other projects):     ", length(original_samples) - length(matched_original)))
 

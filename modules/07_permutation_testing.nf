@@ -111,7 +111,7 @@ process PERM_AGGREGATE_SCREEN {
     publishDir "${params.outdir}/07_permutation_testing", mode: 'copy'
 
     cpus 4
-    memory '32 GB'
+    memory '128 GB'
     time '1h'
 
     input:

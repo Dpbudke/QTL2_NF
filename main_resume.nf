@@ -61,6 +61,7 @@ def helpMessage() {
                             significant_qtls - Start from QTL identification
                             visualize       - Start from QTL visualization
                             timbr           - Start from TIMBR allelic series analysis
+                            eqtl_map        - Regenerate only the genome-wide eQTL map (eQTL study type)
 
     Other Arguments:
         --finalreport_files  Path to GeneSeek FinalReport file(s)
@@ -96,7 +97,7 @@ if (params.help) {
 
 // Validate resume_from parameter
 def valid_resume_steps = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr']
+                         'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr', 'eqtl_map']
 
 if (params.resume_from && !(params.resume_from in valid_resume_steps)) {
     log.error "Invalid --resume_from value: ${params.resume_from}"
@@ -146,7 +147,7 @@ if (params.analysis_type && !validAnalysisTypes.contains(params.analysis_type)) 
 def effective_outdir = params.outdir ?: 'results'
 
 def effective_sample_filter = params.sample_filter ?: (
-    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76a"]}' :
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76", "ain76a"]}' :
     params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
 )
 
@@ -194,6 +195,7 @@ include { FIND_PEAKS_CHR; GATHER_PEAKS } from './modules/08_identify_significant
 include { VISUALIZE_QTLS } from './modules/09_visualize.nf'
 include { TIMBR_ANALYSIS } from './modules/10_timbr.nf'
 include { CLASSIFY_CIS_TRANS_EQTLS } from './modules/analyses/classify_cis_trans_eqtls.nf'
+include { PLOT_EQTL_MAP } from './modules/analyses/plot_eqtl_map.nf'
 
 /*
 ========================================================================================
@@ -216,7 +218,7 @@ def shouldRunStep(currentStep, resumeFrom) {
     if (!resumeFrom) return true
 
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
-                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr']
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr', 'eqtl_map']
 
     def currentIndex = stepOrder.indexOf(currentStep)
     def resumeIndex = stepOrder.indexOf(resumeFrom)
@@ -604,13 +606,25 @@ workflow {
 
         // eQTL CLASSIFICATION: Classify cis vs trans eQTLs (eQTL study type only)
         if (params.study_type == 'eQTL') {
-            log.info "Running eQTL cis/trans classification (study_type = eQTL)"
-            CLASSIFY_CIS_TRANS_EQTLS(
-                ch_significant_qtls,
-                Channel.fromPath(params.gtf_file),
-                ch_filtered_cross2
-            )
-            CLASSIFY_CIS_TRANS_EQTLS.out.summary.view { "eQTL classification summary: $it" }
+            if (shouldRunStep('significant_qtls', params.resume_from)) {
+                log.info "Running eQTL cis/trans classification (study_type = eQTL)"
+                CLASSIFY_CIS_TRANS_EQTLS(
+                    ch_significant_qtls,
+                    Channel.fromPath(params.gtf_file),
+                    ch_filtered_cross2
+                )
+                CLASSIFY_CIS_TRANS_EQTLS.out.summary.view { "eQTL classification summary: $it" }
+                ch_classification = CLASSIFY_CIS_TRANS_EQTLS.out.classification
+                ch_position_map   = CLASSIFY_CIS_TRANS_EQTLS.out.position_map
+            } else {
+                log.info "Loading existing eQTL classification - skipping CLASSIFY_CIS_TRANS_EQTLS"
+                ch_classification = Channel.fromPath(checkFileExists("${input_dir}/00_analyses/eqtl_cis_trans_classification.csv", "eQTL classification"))
+                ch_position_map   = Channel.fromPath(checkFileExists("${input_dir}/00_analyses/qtl2_position_map.rds", "position map"))
+            }
+
+            // Genome-wide eQTL map (cis = blue diagonal, trans off-diagonal)
+            PLOT_EQTL_MAP(ch_classification, ch_position_map, ch_study_prefix)
+            PLOT_EQTL_MAP.out.map.view { "Genome-wide eQTL map: $it" }
         } else {
             log.info "Skipping eQTL classification (study_type = ${params.study_type})"
         }
