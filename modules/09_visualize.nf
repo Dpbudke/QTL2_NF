@@ -66,8 +66,7 @@ process VISUALIZE_BATCH {
     val(interactive_covar)
 
     output:
-    path("chr*/*.png"),   emit: qtl_plots_flat,   optional: true
-    path("chr*/*/*.png"), emit: qtl_plots_subdir, optional: true
+    path("chr*/*/*/*.png"), emit: qtl_plots, optional: true
     path("batch_${batch_id}_report.txt"), emit: batch_report
 
     script:
@@ -92,7 +91,15 @@ process VISUALIZE_BATCH {
 
     pmap        <- cross2\$pmap
     gmap        <- cross2\$gmap
-    HALF_WIN_MB <- 2
+    HALF_WIN_MB <- 4
+
+    # Order chromosomes naturally (1..19, X) for genome-wide plots. The stored
+    # map is in lexical order (10,11,...,19,1,2,...) which otherwise places chr10
+    # first on the genome-wide LOD plot. Per-chr/window lookups are name-based and
+    # unaffected; only plot_scan1's genome-wide x-axis depends on map order.
+    chr_order <- c(as.character(1:99), "X", "Y", "M")
+    chr_order <- c(chr_order[chr_order %in% names(pmap)], setdiff(names(pmap), chr_order))
+    pmap      <- pmap[chr_order]
 
     # ── Build covariate matrices ──────────────────────────────────────────────
     interactive_covar_name <- "${interactive_covar}"
@@ -176,95 +183,94 @@ process VISUALIZE_BATCH {
             ap_win[[chr]] <- ap_chr[[chr]][, , win_markers, drop = FALSE]
             pmap_win      <- list(); pmap_win[[chr]] <- pmap[[chr]][win_markers]
 
-            base_name <- paste0(safe_id, "_chr", chr, "_", round(peak_Mb, 1), "Mb_LOD", round(lod, 2))
+            # On-disk layout: chr{N}/{phenotype}/{lod,coef,blup}/{cis,chr,genome}.png
             chr_dir   <- paste0("chr", chr)
+            qtl_dir   <- file.path(chr_dir, safe_id)
+            lod_dir   <- file.path(qtl_dir, "lod")
+            coef_dir  <- file.path(qtl_dir, "coef")
+            dir.create(lod_dir,  showWarnings = FALSE, recursive = TRUE)
+            dir.create(coef_dir, showWarnings = FALSE, recursive = TRUE)
 
-            if (do_stratify) {
-                qtl_dir <- file.path(chr_dir, base_name)
-                dir.create(qtl_dir, showWarnings = FALSE, recursive = TRUE)
-            }
+            pmap_full_chr <- pmap[chr]   # named list holding the single full chromosome
 
-            # ── LOD plot ──────────────────────────────────────────────────────
-            lod_fname <- if (do_stratify) {
-                file.path(qtl_dir, "lod.png")
-            } else {
-                file.path(chr_dir, paste0(base_name, "_lod.png"))
-            }
-            png(lod_fname, width = 900, height = 400)
+            # ── LOD plots: cis (±window) / chr / genome ───────────────────────
+            png(file.path(lod_dir, "cis.png"), width = 900, height = 400)
             par(mar = c(4.5, 4.5, 2.5, 0.5))
-            plot_scan1(scan_results, pmap, lodcolumn = gene_id, chr = chr,
-                       bgcolor = "gray95",
-                       xlab    = paste("Chr", chr, "position (Mb)"),
-                       ylab    = "LOD score")
-            title(main = sprintf("LOD — %s  Chr %s  (peak %.2f Mb, LOD %.2f)", gene_id, chr, peak_Mb, lod))
+            plot_scan1(scan_results, pmap_win, lodcolumn = gene_id, bgcolor = "gray95",
+                       xlab = paste("Chr", chr, "position (Mb)"), ylab = "LOD score")
             abline(v = peak_Mb, col = "red", lty = 3, lwd = 1.5)
-            dev.off()
-            plots_ok <- plots_ok + 1L
+            title(main = sprintf("LOD [cis +/-%g Mb] — %s  Chr %s  (peak %.2f Mb, LOD %.2f)",
+                                 HALF_WIN_MB, gene_id, chr, peak_Mb, lod))
+            dev.off(); plots_ok <- plots_ok + 1L
 
-            # ── Define groups ─────────────────────────────────────────────────
-            # Restrict to samples present in alleleprobs — cross2\$covar may contain
-            # samples that were phenotyped but lack genotype data (absent from the
-            # FinalReport chip files). Kinship and alleleprob only cover genotyped
-            # samples, so subsetting with the full covar rownames causes
-            # "subscript out of bounds" on kinship[[chr]][ids, ids].
+            png(file.path(lod_dir, "chr.png"), width = 900, height = 400)
+            par(mar = c(4.5, 4.5, 2.5, 0.5))
+            plot_scan1(scan_results, pmap, lodcolumn = gene_id, chr = chr, bgcolor = "gray95",
+                       xlab = paste("Chr", chr, "position (Mb)"), ylab = "LOD score")
+            abline(v = peak_Mb, col = "red", lty = 3, lwd = 1.5)
+            title(main = sprintf("LOD [chr] — %s  Chr %s  (peak %.2f Mb, LOD %.2f)",
+                                 gene_id, chr, peak_Mb, lod))
+            dev.off(); plots_ok <- plots_ok + 1L
+
+            # genome: no chr= → all chromosomes; no peak line (Mb does not map
+            # cleanly across the concatenated multi-chromosome x-axis).
+            png(file.path(lod_dir, "genome.png"), width = 1400, height = 400)
+            par(mar = c(4.5, 4.5, 2.5, 0.5))
+            plot_scan1(scan_results, pmap, lodcolumn = gene_id, bgcolor = "gray95",
+                       ylab = "LOD score")
+            title(main = sprintf("LOD [genome] — %s  (peak Chr %s %.2f Mb, LOD %.2f)",
+                                 gene_id, chr, peak_Mb, lod))
+            dev.off(); plots_ok <- plots_ok + 1L
+
+            # ── Effects: restrict to genotyped samples ────────────────────────
+            # cross2\$covar may contain samples that were phenotyped but lack
+            # genotype data (absent from the FinalReport chip files). Kinship and
+            # alleleprob only cover genotyped samples, so subsetting with the full
+            # covar rownames causes "subscript out of bounds" on kinship[[chr]].
             genotyped_ids <- rownames(alleleprobs[[names(alleleprobs)[1]]])
-            all_ids <- intersect(rownames(covar_data), genotyped_ids)
-            if (do_stratify) {
-                # Interactive run: only the full interaction-model group.
-                # Per-diet-level and BLUP plots are generated by the diet-specific
-                # analyses (AIN76_only, Diet_additive), so skip them here.
-                groups <- list(full = list(ids = all_ids, label = "Full", ac = addcovar, ic = intcovar_mat))
-            } else {
-                groups <- list(full = list(ids = all_ids, label = "Full", ac = addcovar, ic = NULL))
-            }
+            ids   <- intersect(rownames(covar_data), genotyped_ids)
+            ac_g  <- if (!is.null(addcovar) && nrow(addcovar) > 0)
+                         addcovar[intersect(ids, rownames(addcovar)), , drop = FALSE] else NULL
+            ic_g  <- if (do_stratify && !is.null(intcovar_mat) && nrow(intcovar_mat) > 0)
+                         intcovar_mat[intersect(ids, rownames(intcovar_mat)), , drop = FALSE] else NULL
+            kin_g       <- kinship[[chr]][ids, ids]
+            pheno_mat   <- cross2\$pheno[ids, gene_id, drop = FALSE]
+            model_label <- if (!is.null(ic_g)) "GxE intcovar" else "addcovar only"
 
-            # ── Effects plots: coef + blup per group ──────────────────────────
-            for (grp_name in names(groups)) {
-                g    <- groups[[grp_name]]
-                ids  <- g\$ids
-                ac_g <- if (!is.null(g\$ac) && nrow(g\$ac) > 0) g\$ac[intersect(ids, rownames(g\$ac)), , drop = FALSE] else NULL
-                ic_g <- if (!is.null(g\$ic) && nrow(g\$ic) > 0) g\$ic[intersect(ids, rownames(g\$ic)), , drop = FALSE] else NULL
-
-                kin_g     <- kinship[[chr]][ids, ids]
-                pheno_mat <- cross2\$pheno[ids, gene_id, drop = FALSE]
-
-                # scan1coef plot
-                coef_fname <- if (do_stratify) {
-                    file.path(qtl_dir, paste0(grp_name, "_coef_effects.png"))
-                } else {
-                    file.path(chr_dir, paste0(base_name, "_coef_effects.png"))
-                }
-                coef_win    <- scan1coef(ap_win[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g, intcovar = ic_g)
-                model_label <- if (!is.null(ic_g)) "GxE intcovar" else "addcovar only"
-                png(coef_fname, width = 900, height = 500)
+            # Helper: render one founder-effect (coef/BLUP) plot
+            effect_plot <- function(eff_obj, map_obj, fname, kind, level_lab) {
+                png(fname, width = 900, height = 500)
                 par(mar = c(4.5, 4.5, 3.5, 0.5))
-                plot_coefCC(coef_win, pmap_win, bgcolor = "gray95", legend = "bottomleft",
+                plot_coefCC(eff_obj, map_obj, bgcolor = "gray95", legend = "bottomleft",
                             xlab = paste("Chr", chr, "position (Mb)"))
-                title(main = sprintf("%s [coef] — %s  [%.1f–%.1f Mb]  (N=%d)",
-                                     g\$label, gene_id, win_lo, win_hi, length(ids)))
-                mtext(sprintf("+/-%g Mb window | peak %s (%.2f Mb) | %s",
-                              HALF_WIN_MB, peak_marker, peak_Mb, model_label),
+                abline(v = peak_Mb, col = "red", lty = 3, lwd = 1.5)
+                title(main = sprintf("%s [%s] — %s  (N=%d)", level_lab, kind, gene_id, length(ids)))
+                mtext(sprintf("peak %s (%.2f Mb) | %s", peak_marker, peak_Mb, model_label),
                       side = 3, line = 0.1, cex = 0.65, col = "gray40", font = 3)
                 dev.off()
-                plots_ok <- plots_ok + 1L
+            }
 
-                # scan1blup plot — skipped for interactive runs (additive only;
-                # those plots are already produced by the diet-specific analyses)
-                if (!do_stratify) {
-                    blup_fname <- file.path(chr_dir, paste0(base_name, "_blup_effects.png"))
-                    blup_win   <- scan1blup(ap_win[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g)
-                    png(blup_fname, width = 900, height = 500)
-                    par(mar = c(4.5, 4.5, 3.5, 0.5))
-                    plot_coefCC(blup_win, pmap_win, bgcolor = "gray95", legend = "bottomleft",
-                                xlab = paste("Chr", chr, "position (Mb)"))
-                    title(main = sprintf("%s [BLUP] — %s  [%.1f–%.1f Mb]  (N=%d)",
-                                         g\$label, gene_id, win_lo, win_hi, length(ids)))
-                    mtext(sprintf("+/-%g Mb window | peak %s (%.2f Mb) | %s",
-                                  HALF_WIN_MB, peak_marker, peak_Mb, "addcovar only"),
-                          side = 3, line = 0.1, cex = 0.65, col = "gray40", font = 3)
-                    dev.off()
-                    plots_ok <- plots_ok + 1L
-                }
+            # ── coef: cis (±window) / chr ─────────────────────────────────────
+            # Founder effects are estimated per-chromosome; no genome-wide level.
+            coef_cis <- scan1coef(ap_win[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g, intcovar = ic_g)
+            effect_plot(coef_cis, pmap_win, file.path(coef_dir, "cis.png"), "coef",
+                        sprintf("cis +/-%g Mb", HALF_WIN_MB)); plots_ok <- plots_ok + 1L
+            coef_chr <- scan1coef(ap_chr[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g, intcovar = ic_g)
+            effect_plot(coef_chr, pmap_full_chr, file.path(coef_dir, "chr.png"), "coef", "chr")
+            plots_ok <- plots_ok + 1L
+
+            # ── blup: cis (±window) / chr — additive runs only ────────────────
+            # BLUP cannot use the interaction term; for interactive runs these are
+            # produced by the diet-specific analyses (AIN76_only, HC_only, Diet_additive).
+            if (!do_stratify) {
+                blup_dir <- file.path(qtl_dir, "blup")
+                dir.create(blup_dir, showWarnings = FALSE, recursive = TRUE)
+                blup_cis <- scan1blup(ap_win[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g)
+                effect_plot(blup_cis, pmap_win, file.path(blup_dir, "cis.png"), "BLUP",
+                            sprintf("cis +/-%g Mb", HALF_WIN_MB)); plots_ok <- plots_ok + 1L
+                blup_chr <- scan1blup(ap_chr[ids, chr], pheno_mat, kinship = kin_g, addcovar = ac_g)
+                effect_plot(blup_chr, pmap_full_chr, file.path(blup_dir, "chr.png"), "BLUP", "chr")
+                plots_ok <- plots_ok + 1L
             }
 
         }, error = function(e) {
@@ -350,6 +356,15 @@ workflow VISUALIZE_QTLS {
     interactive_covar_ch
 
     main:
+    // Clear previous visualization results so old and new plots do not mix.
+    // Runs on the head node before any publishDir copy, so freshly published
+    // outputs from this run are unaffected.
+    def vizDir = file("${params.outdir}/09_visualize")
+    if (vizDir.exists()) {
+        log.info "Clearing previous visualization results at ${vizDir}"
+        vizDir.deleteDir()
+    }
+
     VISUALIZE_SETUP(
         significant_qtls_ch,
         prefix_ch,
@@ -379,7 +394,6 @@ workflow VISUALIZE_QTLS {
     )
 
     emit:
-    qtl_plots_flat    = VISUALIZE_BATCH.out.qtl_plots_flat
-    qtl_plots_subdir  = VISUALIZE_BATCH.out.qtl_plots_subdir
+    qtl_plots         = VISUALIZE_BATCH.out.qtl_plots
     validation_report = VISUALIZE_AGGREGATE.out.validation_report
 }

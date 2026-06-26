@@ -1,0 +1,40 @@
+[33mNextflow 26.04.4 is available - Please consider updating your version to it(B[m
+N E X T F L O W  ~  version 25.04.6
+Launching `founder_alleles_eqtl.nf` [condescending_williams] DSL2 - revision: 525353f62d
+
+========================================
+ Founder Allele Contributions to eQTL
+========================================
+Study prefix   : DOchln
+Additive model : Diet_additive
+Significance   : 95%
+TIMBR dir      : /project/do2_projects/DO_Choline/QTL2_NF/Results_final/eQTL/Diet_additive/10_timbr
+Output dir     : Results_final/eQTL/Summary/FounderAlleles
+========================================
+
+WARN: There's no process matching config selector: PHENOTYPE_PROCESS
+WARN: There's no process matching config selector: GENOTYPE_PROCESS
+WARN: There's no process matching config selector: PREPARE_GENOME_SCAN_SETUP
+WARN: There's no process matching config selector: PREPARE_GENOME_SCAN_CHR_KINSHIP
+WARN: There's no process matching config selector: COMBINE_GENOME_SCAN_PREP
+WARN: There's no process matching config selector: GENOME_SCAN_SETUP
+WARN: There's no process matching config selector: GENOME_SCAN_BATCH
+WARN: There's no process matching config selector: COMBINE_BATCH_RESULTS
+WARN: There's no process matching config selector: FILTER_PEAKS_BY_REGION
+WARN: There's no process matching config selector: PERM_SETUP
+WARN: There's no process matching config selector: PERM_BENCHMARK
+WARN: There's no process matching config selector: PERM_COORDINATOR
+WARN: There's no process matching config selector: PERM_AGGREGATE
+WARN: There's no process matching config selector: FIND_PEAKS_CHR
+WARN: There's no process matching config selector: GATHER_PEAKS
+WARN: There's no process matching config selector: VISUALIZE_SETUP
+WARN: There's no process matching config selector: VISUALIZE_BATCH
+WARN: There's no process matching config selector: VISUALIZE_AGGREGATE
+WARN: There's no process matching config selector: TIMBR_SETUP
+WARN: There's no process matching config selector: TIMBR_BATCH
+WARN: There's no process matching config selector: TIMBR_AGGREGATE
+WARN: There's no process matching config selector: BROMAN_MIXUP_QC
+[21/6bd6d4] Submitted process > COMPUTE_FOUNDER_EFFECTS (Founder effects: qtl2 BLUP + TIMBR (DOchln))
+[24/b3c161] Submitted process > PLOT_FOUNDER_CONTRIBUTIONS (Founder contribution figures (DOchln))
+Founder figures -> /project/do2_projects/DO_Choline/QTL2_NF/nextflow_work/24/b3c161e0e057f481edc8378752b1db/DOchln_founder_effect_boxplots.png (A,B,C1; TIMBR per-founder figs held)
+Founder allele contributions analysis complete. Results: Results_final/eQTL/Summary/FounderAlleles

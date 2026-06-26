@@ -650,7 +650,7 @@ workflow {
         }
 
         // MODULE 10: TIMBR Allelic Series Analysis
-        if (shouldRunStep('timbr', params.resume_from)) {
+        if (shouldRunStep('timbr', params.resume_from) && params.run_timbr) {
             // Load significant QTLs from file if resuming from timbr
             def ch_sig_qtls_timbr = (params.resume_from == 'timbr')
                 ? Channel.fromPath(checkFileExists("${input_dir}/08_significant_qtls/${params.study_prefix}_significant_qtls.csv", "significant QTLs for TIMBR"))

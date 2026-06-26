@@ -307,30 +307,50 @@ The workflow detects prior progress by checking for on-disk artifacts in priorit
 **Resources**: 8 CPUs, 128GB RAM, 4 hours
 
 ### Module 9: QTL Visualizations (`09_visualize.nf`)
-**Purpose**: Generate publication-quality QTL coefficient plots for highly significant QTLs
+**Purpose**: Generate publication-quality QTL plots (LOD curves and founder allele effects) for highly significant QTLs, in a single unified layout shared by all four analysis types (Diet_additive, Diet_interactive, AIN76_only, HC_only)
 
 **Key Functions**:
 - **High-Confidence QTL Focus**: Visualizes only 99% significant QTLs from Module 8 for maximum stringency
-- **Founder Allele Effect Plots**: Generates LOD score plots, scan1coef() founder allele coefficient plots, and BLUP effect plots for each significant QTL
-- **Coefficient Calculation**: Computes scan1coef() founder allele effects and scan1blup() shrinkage estimates using alleleprobs
-- **Chromosome Organization**: Automatically organizes plots into chromosome-specific subdirectories (chr1/ through chr19/ and chrX/)
-- **Batch Processing**: Efficiently processes thousands of QTLs with progress monitoring
-- **Comprehensive Naming**: Each plot filename includes phenotype, chromosome, position (Mb), LOD score, and plot type for easy identification
-- **Validation Reporting**: Detailed summary of plots generated per chromosome with success/failure tracking
+- **Three Plot Types per QTL**: `lod` (LOD score curve), `coef` (scan1coef() founder allele coefficients), and `blup` (scan1blup() shrinkage estimates) — `blup` is generated for additive models only (see below)
+- **Multiple Zoom Levels per Plot Type**:
+  - `lod/`: **cis** (±4 Mb around the peak), **chr** (whole chromosome), and **genome** (genome-wide across all chromosomes, ordered naturally 1..19, X)
+  - `coef/`: **cis** (±4 Mb) and **chr** (whole chromosome) — no genome level, since scan1coef() founder effects are estimated per-chromosome
+  - `blup/`: **cis** (±4 Mb) and **chr** (whole chromosome) — no genome level, since scan1blup() is per-chromosome; additive models only
+- **Model-Aware Output**: `Diet_additive`, `AIN76_only`, and `HC_only` produce the full set (lod + coef + blup = 7 plots per QTL). `Diet_interactive` produces lod + coef only (5 plots per QTL) — BLUP cannot use the GxE interaction term, and those founder effects are already covered by the independent AIN76_only/HC_only/Diet_additive analyses, so no per-diet stratified plots are generated for the interactive model
+- **Unified Chromosome/Phenotype Organization**: Plots are organized as `chr{N}/{phenotype}/{lod,coef,blup}/{cis,chr,genome}.png` for every analysis type — no more model-specific layouts. `{phenotype}` is the sanitized `lodcolumn` (gene/trait id); no phenotype has more than one 99%-significant peak on a single chromosome, so this directory structure is collision-free
+- **Peak Marking**: The cis and chr-level LOD plots mark the peak with a red dashed vertical line; the genome-wide LOD plot instead names the peak chromosome/position in its title, since a single vertical line cannot map cleanly across the concatenated multi-chromosome x-axis
+- **Clean Slate Per Run**: The `09_visualize/` output directory is cleared at the start of each run (before any plots are generated) so old and new figures never mix
+- **Batch Processing**: Efficiently processes thousands of QTLs via SLURM batches (`--viz_qtls_per_batch`, default 100) with internal `mclapply` parallelism within each batch
+- **Validation Reporting**: Detailed summary of plots generated/failed, aggregated across all batches
 
 **Output Organization**:
-- **chr{1-19,X}/ subdirectories**: Plots organized by chromosome for easy navigation
-- **Filename format**: `{phenotype}_chr{chr}_{pos}Mb_LOD{lod}_{type}.png`
-  - `{type}` is one of: `lod`, `coef_effects`, `blup_effects`
-- **Example**: `TMAO_base_ln_chr12_86.1Mb_LOD27.92_lod.png`
-- **GxE analyses** (`--interactive_covar`): Plots are additionally stratified by covariate level (e.g., `ain76a_coef_effects.png`, `hc_coef_effects.png`, `full_coef_effects.png`)
+```
+09_visualize/
+└── chr{N}/
+    └── {phenotype}/
+        ├── lod/
+        │   ├── cis.png      # ±4 Mb around the peak, red dashed peak line
+        │   ├── chr.png      # whole chromosome, red dashed peak line
+        │   └── genome.png   # genome-wide (all chromosomes), peak named in title
+        ├── coef/
+        │   ├── cis.png      # scan1coef() founder allele effects, ±4 Mb
+        │   └── chr.png      # scan1coef() founder allele effects, whole chromosome
+        └── blup/             # additive models only (Diet_additive, AIN76_only, HC_only)
+            ├── cis.png      # scan1blup() shrinkage estimates, ±4 Mb
+            └── chr.png      # scan1blup() shrinkage estimates, whole chromosome
+```
 - **Setup files**: `viz_batch_qtls.csv`, `viz_batch_ids.txt`, `viz_setup_log.txt`
+- **Aggregate report**: `visualization_report.txt`
 
 **Use Cases**:
-- **Publication Figures**: High-quality visualizations for manuscripts and presentations
-- **Allele Effect Interpretation**: Visual assessment of founder strain contributions to trait variation
+- **Publication Figures**: High-quality, consistently structured visualizations for manuscripts and presentations
+- **Allele Effect Interpretation**: Visual assessment of founder strain contributions to trait variation, at both a tight cis window and the full chromosome scale
+- **Genome-Wide Context**: The new `lod/genome.png` plot situates each QTL's peak within the genome-wide LOD landscape
 - **QTL Validation**: Quick visual confirmation of strong, biologically meaningful QTL signals
 - **Follow-up Prioritization**: Identify QTLs with interesting allele effect patterns for further investigation
+
+**Key Parameters**:
+- `--viz_qtls_per_batch` — QTLs per SLURM visualization batch (default: `100`)
 
 **Resources**: SETUP 2 CPUs / 8 GB / 30 min; BATCH 16 CPUs / 128 GB (scales on retry) / 2 h; AGGREGATE 2 CPUs / 8 GB / 30 min
 
@@ -521,6 +541,195 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 **Usage**: Triggered automatically by Module 8 when `--study_type eQTL` is set; no separate invocation required
 
 **Resources**: Inherits default process resources (lightweight R job, runs in minutes)
+
+### Optional: Genome-wide eQTL Map (`plot_eqtl_map.nf`)
+**Purpose**: Generate two per-model publication-quality figures from the cis/trans classification: a genome-wide eQTL scatter map and a cis-eQTL resolution plot
+
+**Trigger**: Runs automatically when `params.study_type == 'eQTL'`, immediately after `CLASSIFY_CIS_TRANS_EQTLS`. Can also be regenerated in isolation using `--resume_from eqtl_map`.
+
+**Process Workflow**:
+1. Filters to `significance_level == "95%"` from the classification CSV (captures all eQTLs at 95% GW or stronger, since the table nests significance levels)
+2. Builds genome-wide coordinate offsets from the physical map and plots eQTL peak position (x-axis) against gene TSS position (y-axis) with alternating chromosome shading
+3. Generates a second figure of signed peak-to-TSS distance versus LOD for same-chromosome eQTLs, using a pseudo-log x-axis
+
+**Output Files** (`results/00_analyses/`):
+- **{prefix}_eqtl_map.png**: Genome-wide eQTL map (10 x 10 in, 300 DPI); cis in blue on the diagonal, trans in black off-diagonal
+- **{prefix}_cis_resolution.png**: Signed peak-to-TSS distance vs LOD; +/-4 Mb cis threshold marked with red dashed lines; median mapping resolution in subtitle
+- **{prefix}_eqtl_map_log.txt**: Processing log with plotted cis/trans counts and resolution statistics
+
+**Resources**: 2 CPUs, 16 GB RAM, 30 minutes
+
+## Post-Pipeline eQTL Analysis Workflows
+
+These standalone Nextflow entry-point scripts run **after** the main pipeline and cis/trans classification are complete for all relevant models. They are not called by `main.nf` or `main_resume.nf`. Each has its own launcher file at the repository root and produces outputs in a shared `Summary/` directory under `results_base`.
+
+### eQTL Heritability and Effect Size (`heritability_eqtl.nf`)
+**Purpose**: For every 95% GW eQTL from the additive model, compute narrow-sense heritability (h2) via `qtl2::est_herit()` and the phenotypic variance explained by the peak marker (Haley-Knott dR2). Produces 4 figures plus a per-eQTL CSV. Figure D stratifies variance explained by a diet-dependence category derived from cross-model eQTL detection.
+
+**When to run**: Once, after the additive model's scan-prep (Module 5) and cis/trans classification are complete for all diet models.
+
+**Usage**:
+```bash
+# Run with defaults (study_prefix=DOchln, results_base=Results_final/eQTL, additive_model=Diet_additive)
+nextflow run heritability_eqtl.nf --study_prefix DOchln
+
+# Specify alternate directories or models
+nextflow run heritability_eqtl.nf \
+  --study_prefix DOchln \
+  --results_base Results_final/eQTL \
+  --additive_model Diet_additive \
+  --diet_models AIN76_only,HC_only,Diet_interactive
+```
+
+**Parameters**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--study_prefix` | `DOchln` | Output file prefix; must match the additive model's file naming |
+| `--results_base` | `Results_final/eQTL` | Base directory holding per-model result subdirectories |
+| `--additive_model` | `Diet_additive` | Model directory providing cross2, alleleprob, genetic map, and classification |
+| `--diet_models` | `AIN76_only,HC_only,Diet_interactive` | Comma-separated model names for diet-dependence category derivation |
+
+**Required Inputs** (resolved from `<results_base>/<additive_model>/`):
+- `04_cross2_creation/{prefix}_cross2.rds`
+- `05_genome_scan_preparation/{prefix}_alleleprob.rds`
+- `05_genome_scan_preparation/{prefix}_genetic_map.rds`
+- `00_analyses/eqtl_cis_trans_classification.csv`
+- `<results_base>/<model>/00_analyses/eqtl_cis_trans_classification.csv` for each diet model
+
+**Workflow**: `COMPUTE_HERIT_VAREXP` (32 CPUs, 64 GB, 2h) then `PLOT_HERIT_EFFECTSIZE` (2 CPUs, 16 GB, 30m)
+
+**Output Files** (`<results_base>/Summary/Heritability/`):
+
+| File | Description |
+|------|-------------|
+| `{prefix}_herit_varexp.csv` | Per-eQTL table: `lodcolumn, gene_name, eqtl_type, qtl_chr, qtl_pos_cM, qtl_pos_mb, lod, h2, varexp` |
+| `{prefix}_heritability_distribution.png` | Histogram of h2 across unique eQTL genes; median marked with red dashed line |
+| `{prefix}_herit_vs_varexp.png` | Scatter of h2 vs dR2 per eQTL, colored by LOD (log10 scale); Spearman rho annotated |
+| `{prefix}_varexp_cis_trans.png` | Boxplot: dR2 for cis vs trans eQTLs; Wilcoxon rank-sum p-value |
+| `{prefix}_varexp_by_diet_category.png` | Boxplot: dR2 by diet-dependence category; Kruskal-Wallis p-value |
+| `{prefix}_diet_categories.csv` | `herit_varexp.csv` rows with an added `category` column |
+| `{prefix}_herit_summary.txt` | Plain-text digest of all summary statistics backing Figures A–D (h2 distribution, Spearman rho/p, cis vs trans medians + Wilcoxon, per-category medians + Kruskal-Wallis, category counts) |
+| `{prefix}_herit_compute_log.txt` | Compute log with median h2 and dR2 values |
+| `{prefix}_herit_figures_log.txt` | Figures log with per-category counts |
+
+**Diet-Dependence Categories** (mutually exclusive, derived from 95% GW eQTL detection across models):
+- `constitutive` — detected in both AIN76_only AND HC_only
+- `AIN-specific` — detected in AIN76_only but NOT HC_only
+- `HC-specific` — detected in HC_only but NOT AIN76_only
+- `interactive` — detected in Diet_interactive (and not already constitutive or diet-specific)
+- `uncategorized` — does not meet any of the above criteria
+
+### Cross-model eQTL Summary (`summary_eqtl.nf`)
+**Purpose**: Generate summary figures that span all analysis models simultaneously, comparing eQTL yield (distinct cis and trans counts at 95% GW) across diet models and modeling approaches.
+
+**When to run**: Once, after all models have produced their `eqtl_cis_trans_classification.csv` at `<results_base>/<model>/00_analyses/`.
+
+**Usage**:
+```bash
+# Run with defaults
+nextflow run summary_eqtl.nf
+
+# Specify all parameters
+nextflow run summary_eqtl.nf \
+  --study_prefix DOchln \
+  --results_base Results_final/eQTL \
+  --models AIN76_only,HC_only,Diet_additive,Diet_interactive
+```
+
+**Parameters**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--study_prefix` | `DOchln` | Output file prefix |
+| `--results_base` | `Results_final/eQTL` | Base directory holding per-model result subdirectories |
+| `--models` | `AIN76_only,HC_only,Diet_additive,Diet_interactive` | Comma-separated model names in the desired plot order |
+
+**Required Inputs**: `<results_base>/<model>/00_analyses/eqtl_cis_trans_classification.csv` for every model in `--models`; the workflow validates all inputs at startup and exits with a clear error naming any model whose results are not yet ready.
+
+**Workflow**: `SUMMARY_EQTL_PLOTS` (2 CPUs, 16 GB, 30 min)
+
+**Output Files** (`<results_base>/Summary/`):
+
+| File | Description |
+|------|-------------|
+| `{prefix}_eqtl_cis_trans_barchart.png` | Stacked bar chart: cis (blue) and trans (black) eQTL counts per model, with per-segment and total count labels |
+| `{prefix}_eqtl_counts_by_model.csv` | Wide-format count table: columns `model`, `cis`, `trans` |
+| `{prefix}_eqtl_summary_log.txt` | Processing log with per-model eQTL counts |
+
+**Count Logic**: Counts are from `significance_level == "95%"` in each model's classification CSV. The table nests significance levels (a QTL passing 95% carries rows for 63%, 90%, 95%, and 99% if it passes that threshold too), so filtering `significance_level == "95%"` is the correct way to obtain the distinct, complete 95%-significant set — using `lod >= signif_95` would overcount.
+
+### Founder Allele Contributions to eQTL (`founder_alleles_eqtl.nf`)
+**Purpose**: For every 99% GW eQTL from the additive model, compute qtl2 BLUP founder effects at the peak marker (via single-marker `scan1blup` using the precomputed LOCO kinship) and read TIMBR allele-collapsed posterior effects (from per-locus TIMBR RDS files). Produces 3 per-eQTL CSVs and 7 figures characterizing how the 8 DO founder strains contribute to eQTL variation. TIMBR results exist only at the 99% GW threshold, which is why this workflow operates exclusively at that significance level.
+
+**When to run**: Once, after the additive model's scan-prep (Module 5), cis/trans classification, and TIMBR (Module 10) are all complete.
+
+**Usage**:
+```bash
+# Run with defaults (study_prefix=DOchln, results_base=Results_final/eQTL, additive_model=Diet_additive)
+nextflow run founder_alleles_eqtl.nf --study_prefix DOchln
+
+# Specify alternate directories or model
+nextflow run founder_alleles_eqtl.nf \
+  --study_prefix DOchln \
+  --results_base Results_final/eQTL \
+  --additive_model Diet_additive \
+  --sig_level '99%'
+```
+
+**Parameters**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--study_prefix` | `DOchln` | Output file prefix; must match the additive model's file naming |
+| `--results_base` | `Results_final/eQTL` | Base directory holding per-model result subdirectories |
+| `--additive_model` | `Diet_additive` | Model directory providing cross2, alleleprob, genetic map, LOCO kinship, classification, and TIMBR outputs |
+| `--sig_level` | `99%` | eQTL significance threshold to analyze (TIMBR exists only at 99%) |
+| `--summary_outdir` | `<results_base>` | Root for the `Summary/FounderAlleles/` output directory |
+
+**Required Inputs** (resolved from `<results_base>/<additive_model>/`):
+- `04_cross2_creation/{prefix}_cross2.rds`
+- `05_genome_scan_preparation/{prefix}_alleleprob.rds`
+- `05_genome_scan_preparation/{prefix}_genetic_map.rds`
+- `05_genome_scan_preparation/{prefix}_kinship_loco.rds`
+- `00_analyses/eqtl_cis_trans_classification.csv` (filtered to `significance_level == "99%"`)
+- `10_timbr/{prefix}_timbr_master_summary.csv`
+- `10_timbr/chr*/...` per-locus TIMBR RDS files
+
+**Workflow**: `COMPUTE_FOUNDER_EFFECTS` (32 CPUs, 64 GB, 4h) then `PLOT_FOUNDER_CONTRIBUTIONS` (2 CPUs, 16 GB, 30m)
+
+**Output Files** (`<results_base>/Summary/FounderAlleles/`):
+
+| File | Description |
+|------|-------------|
+| `{prefix}_founder_blup.csv` | Per-eQTL qtl2 BLUP effects: `lodcolumn, gene_name, eqtl_type, chr, pos, peak_Mb, lod, blup_A..blup_H, z_A..z_H` (center-scaled z-scores across the 8 founders within each locus) |
+| `{prefix}_timbr_effects.csv` | Per-locus TIMBR allele-collapsed posterior effects: `lodcolumn, chr, pos, peak_Mb, lod, n_functional_alleles, top_series_pattern, timbr_A..timbr_H` |
+| `{prefix}_founder_effects.csv` | BLUP + TIMBR merged on `lodcolumn + chr`; all columns from both tables |
+| `{prefix}_founder_compute_log.txt` | Compute log with per-chromosome locus counts and non-NA effect counts |
+| `{prefix}_founder_effect_boxplots.png` | **Fig A**: Per-founder boxplots of center-scaled BLUP z-scores; Kruskal-Wallis p-value annotated; BH-corrected Dunn post-hoc (manually implemented; `dunn.test`/`FSA` not in container) |
+| `{prefix}_founder_effects_circos.png` | **Fig B**: circlize circular genome plot with 8 founder tracks of center-scaled BLUP effects vs genomic position, one point per eQTL peak |
+| `{prefix}_timbr_singleton_frequency.png` | **Fig C1**: Per-founder fraction of TIMBR loci where the founder is its own (singleton) allele group in the MAP allelic series |
+| `{prefix}_timbr_higheffect_frequency.png` | **Fig C2**: Per-founder fraction of loci where the founder is in the highest-|effect| allele group |
+| `{prefix}_blup_vs_timbr_topLOD.png` | **Fig D1**: Paired-bar comparison (qtl2 BLUP vs TIMBR collapsed, mean-centered) for the up-to-6 highest-LOD eQTL |
+| `{prefix}_blup_vs_timbr_wildderived.png` | **Fig D2**: Paired-bar comparison for up-to-6 eQTL where CAST (F) or PWK (G) is resolved as a singleton allele |
+| `{prefix}_blup_vs_timbr_spanalleles.png` | **Fig D3**: Paired-bar comparison spanning distinct `n_functional_alleles` counts (one representative per count) |
+| `{prefix}_founder_summary.txt` | Plain-text digest: Fig A medians + Kruskal-Wallis + Dunn pairs for CAST/PWK, C1/C2 per-founder frequencies, D1–D3 selected gene names |
+| `{prefix}_founder_figures_log.txt` | Figures log with completion status for each figure |
+
+**Founder Code Reference** (qtl2 order A–H):
+
+| Code | Strain |
+|------|--------|
+| A | A/J |
+| B | C57BL/6J |
+| C | 129S1/SvImJ |
+| D | NOD/ShiLtJ |
+| E | NZO/HlLtJ |
+| F | CAST/EiJ |
+| G | PWK/PhJ |
+| H | WSB/EiJ |
+
+**Diet Covariate Handling**: Diet is treated as binary (ain76 vs hc); samples labeled `ain76a` are recoded to `ain76` before model matrix construction, matching the covariate encoding used in Module 6.
 
 ## Installation and Setup
 
@@ -753,6 +962,17 @@ nextflow run main_resume.nf \
 nextflow run main_resume.nf \
   --resume_from visualize \
   --study_prefix DOchln
+
+# Resume from QTL visualization without triggering TIMBR (Module 10)
+nextflow run main_resume.nf \
+  --resume_from visualize \
+  --study_prefix DOchln \
+  --run_timbr false
+
+# Regenerate only the genome-wide eQTL map (eQTL study type)
+nextflow run main_resume.nf \
+  --resume_from eqtl_map \
+  --study_prefix DOchln
 ```
 
 **Resume Options**:
@@ -766,8 +986,9 @@ nextflow run main_resume.nf \
 - `permutation` - Start from permutation testing; the workflow auto-detects which stage is complete (five-case logic: fullPerm.rds done → skip all; COORDINATOR_full_COMPLETE → aggregate only; screen_passers.txt → stage 2 + aggregate; COORDINATOR_screen_COMPLETE → screen aggregate + stage 2 + aggregate; fresh → full two-stage flow)
 - `perm_aggregate` - Run only the final PERM_AGGREGATE step; use when `COORDINATOR_full_COMPLETE` is on disk but the aggregation step failed or was not yet run; reads batch files directly from `07_permutation_testing/batches_full/`
 - `significant_qtls` - Start from significant QTL identification and summarization
-- `visualize` - Start from QTL visualization (plot_coefCC for 99% significant QTLs)
-- `timbr` - Start from TIMBR allelic series analysis
+- `visualize` - Start from QTL visualization (LOD, scan1coef, and scan1blup plots for 99% significant QTLs); clears and regenerates `09_visualize/`
+- `timbr` - Start from TIMBR allelic series analysis (gated on `--run_timbr`; pass `--run_timbr false` to run `visualize` without triggering Module 10)
+- `eqtl_map` - Regenerate only the genome-wide eQTL map and cis-resolution plot (`PLOT_EQTL_MAP`); requires `study_type == 'eQTL'`; loads classification CSV and position map from existing `results/00_analyses/` files
 
 **Note on `perm_aggregate`**: This resume case triggers the final `PERM_AGGREGATE` step only. It expects `COORDINATOR_full_COMPLETE` to be present on disk and reads stage 2 batch files directly from the published `07_permutation_testing/batches_full/` directory, validated against `{prefix}_screen_passers.txt`. Use this when stage 2 coordinator jobs have all completed but the aggregation step failed or was interrupted.
 
@@ -897,16 +1118,22 @@ results/
 │   ├── {prefix}_qtl_summary.txt     # Summary statistics and distributions
 │   ├── {prefix}_high_priority_qtls.csv  # Exceptional QTLs (LOD ≥ 10)
 │   └── qtl_identification_report.txt
-├── 09_visualize/                    # QTL visualization plots
+├── 09_visualize/                    # QTL visualization plots (cleared and regenerated each run)
 │   ├── viz_batch_qtls.csv           # QTLs with batch assignments
 │   ├── viz_setup_log.txt            # Setup report
 │   ├── chr1/
-│   │   ├── {phenotype}_chr1_{pos}Mb_LOD{lod}_lod.png
-│   │   ├── {phenotype}_chr1_{pos}Mb_LOD{lod}_coef_effects.png
-│   │   └── {phenotype}_chr1_{pos}Mb_LOD{lod}_blup_effects.png
-│   ├── ...                          # Additional chromosomes
-│   ├── chrX/
-│   │   └── {phenotype}_chrX_{pos}Mb_LOD{lod}_{type}.png
+│   │   └── {phenotype}/             # one subdirectory per significant phenotype/gene on this chromosome
+│   │       ├── lod/
+│   │       │   ├── cis.png          # +/-4 Mb around peak, red dashed peak line
+│   │       │   ├── chr.png          # whole chromosome, red dashed peak line
+│   │       │   └── genome.png       # genome-wide (all chromosomes), peak named in title
+│   │       ├── coef/
+│   │       │   ├── cis.png          # scan1coef() founder allele effects, +/-4 Mb
+│   │       │   └── chr.png          # scan1coef() founder allele effects, whole chromosome
+│   │       └── blup/                # additive models only (Diet_additive, AIN76_only, HC_only)
+│   │           ├── cis.png          # scan1blup() shrinkage estimates, +/-4 Mb
+│   │           └── chr.png          # scan1blup() shrinkage estimates, whole chromosome
+│   ├── ...                          # Additional chromosomes (1-19, X)
 │   └── visualization_report.txt     # Plot generation summary
 ├── 10_timbr/                        # TIMBR allelic series analysis
 │   ├── {prefix}_timbr_qtls.csv      # QTLs filtered for TIMBR analysis
@@ -924,11 +1151,50 @@ results/
 │   │           ├── 03_top_allelic_series.png
 │   │           └── 04_allelic_series_vs_founder_effects.png
 │   └── ...
+├── 00_analyses/                     # eQTL study type: cis/trans classification and map figures
+│   ├── eqtl_cis_trans_classification.csv  # Per-QTL cis/trans classification with TSS distances
+│   ├── eqtl_classification_summary.txt    # Count and LOD summaries by eQTL type and significance
+│   ├── qtl2_position_map.rds              # Reusable gmap/pmap list for cM<->Mb conversion
+│   ├── {prefix}_eqtl_map.png             # Genome-wide eQTL scatter map (cis=blue, trans=black)
+│   ├── {prefix}_cis_resolution.png       # Signed peak-to-TSS distance vs LOD (same-chr eQTLs)
+│   └── {prefix}_eqtl_map_log.txt         # eQTL map processing log
 └── pipeline_info/                   # Execution monitoring and reporting
     ├── execution_timeline.html      # Interactive execution timeline
     ├── execution_report.html        # Comprehensive resource usage report
     ├── execution_trace.txt          # Detailed process execution trace
     └── pipeline_dag.svg             # Visual workflow representation
+```
+
+**Post-pipeline eQTL summary outputs** (produced by the standalone launchers `heritability_eqtl.nf`, `summary_eqtl.nf`, and `founder_alleles_eqtl.nf`; land in `<results_base>/Summary/` outside the main `results/` tree):
+```
+<results_base>/Summary/
+├── {prefix}_eqtl_cis_trans_barchart.png    # Cross-model stacked bar chart (cis/trans counts per model)
+├── {prefix}_eqtl_counts_by_model.csv       # Wide-format count table (model, cis, trans)
+├── {prefix}_eqtl_summary_log.txt           # Cross-model summary log
+├── Heritability/
+│   ├── {prefix}_herit_varexp.csv            # Per-eQTL h2 and variance-explained table
+│   ├── {prefix}_heritability_distribution.png
+│   ├── {prefix}_herit_vs_varexp.png
+│   ├── {prefix}_varexp_cis_trans.png
+│   ├── {prefix}_varexp_by_diet_category.png
+│   ├── {prefix}_diet_categories.csv
+│   ├── {prefix}_herit_summary.txt           # Plain-text digest of all Fig A–D statistics
+│   ├── {prefix}_herit_compute_log.txt
+│   └── {prefix}_herit_figures_log.txt
+└── FounderAlleles/
+    ├── {prefix}_founder_blup.csv            # Per-eQTL qtl2 BLUP effects (blup_A..H, z_A..H)
+    ├── {prefix}_timbr_effects.csv           # Per-locus TIMBR allele-collapsed effects (timbr_A..H)
+    ├── {prefix}_founder_effects.csv         # BLUP + TIMBR merged on lodcolumn + chr
+    ├── {prefix}_founder_compute_log.txt     # Compute log with per-chromosome locus counts
+    ├── {prefix}_founder_effect_boxplots.png # Fig A: per-founder center-scaled BLUP boxplots
+    ├── {prefix}_founder_effects_circos.png  # Fig B: circular genome plot, 8 founder tracks
+    ├── {prefix}_timbr_singleton_frequency.png   # Fig C1: per-founder singleton allele frequency
+    ├── {prefix}_timbr_higheffect_frequency.png  # Fig C2: per-founder high-effect group frequency
+    ├── {prefix}_blup_vs_timbr_topLOD.png        # Fig D1: BLUP vs TIMBR, highest-LOD eQTL
+    ├── {prefix}_blup_vs_timbr_wildderived.png   # Fig D2: BLUP vs TIMBR, CAST/PWK as singleton
+    ├── {prefix}_blup_vs_timbr_spanalleles.png   # Fig D3: BLUP vs TIMBR, spanning allele counts
+    ├── {prefix}_founder_summary.txt         # Plain-text digest of all figure statistics
+    └── {prefix}_founder_figures_log.txt     # Figures log with per-figure completion status
 ```
 
 ## Configuration

@@ -201,6 +201,34 @@ process TIMBR_BATCH {
                     prior.alpha.rate  = hp[2],
                     hash.names        = TRUE)
 
+    # ── Correct additive design (founder columns aligned to P's diplotype cols) ─
+    # BUG FIX: TIMBR::additive.design(8,"qtl2") returns a 36-row design in
+    # homozygotes-first order (AA,BB,CC,...,HH,AB,AC,...), but qtl2 genoprob
+    # columns are in interleaved order (AA,AB,BB,AC,BC,CC,...). Pairing them
+    # scrambled the haplotype→founder mapping. Instead build the design from the
+    # ACTUAL diplotype column names of P.
+    #   - Female/autosome state "XZ": 0.5 to founder X and 0.5 to founder Z
+    #     (1.0 if X==Z).
+    #   - X-chromosome MALE hemizygous state "XY" (44-state X genoprob carries
+    #     8 extra states AY..HY; "Y" is the male placeholder, not a founder):
+    #     1.0 to founder X. Row-sums stay 1.0 across sexes, and Sex is already in
+    #     addcovar (residualized out before TIMBR), so dosage compensation is
+    #     handled. Verified to reproduce qtl2 alleleprob EXACTLY on both autosome
+    #     and X (Temp/verify_X_design.R, max|diff|=0).
+    make_additive_design <- function(states) {
+        F8   <- c("A", "B", "C", "D", "E", "F", "G", "H")
+        Amat <- matrix(0, length(states), 8, dimnames = list(states, F8))
+        for (k in seq_along(states)) {
+            s <- strsplit(states[k], "")[[1]]
+            if (length(s) == 2 && s[2] == "Y") {
+                Amat[k, s[1]] <- 1.0          # male hemizygous X state
+            } else {
+                for (f in s) Amat[k, f] <- Amat[k, f] + 0.5
+            }
+        }
+        Amat
+    }
+
     # ── Identify common samples across genoprob, phenotype, and addcovar ──────
     geno_samples  <- rownames(genoprob[[1]])
     pheno_samples <- rownames(cross2\$pheno)
@@ -267,7 +295,7 @@ process TIMBR_BATCH {
             # ── Build prior.D ──────────────────────────────────────────────
             prior.D <- list(
                 P           = P_aligned,
-                A           = TIMBR::additive.design(8, "qtl2"),
+                A           = make_additive_design(colnames(P_aligned)),
                 fixed.diplo = FALSE
             )
 
