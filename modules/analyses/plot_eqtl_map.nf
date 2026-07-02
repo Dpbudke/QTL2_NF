@@ -1,6 +1,6 @@
 process PLOT_EQTL_MAP {
     tag "Plotting genome-wide eQTL map"
-    publishDir "${params.outdir}/00_analyses", mode: 'copy'
+    publishDir "${params.eqtl_map_outdir ?: "${params.outdir}/00_analyses"}", mode: 'copy'
 
     container "file:///${projectDir}/singularity_cache/dpbudke-qtl2-pipeline-latest.img"
 

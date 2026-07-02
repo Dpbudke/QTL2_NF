@@ -25,7 +25,7 @@ nextflow.enable.dsl = 2
         --qtl_file        : Path to significant QTLs CSV file
         --cross2_file     : Path to cross2 RDS file (for cM to Mb conversion)
         --gtf_file        : Path to GTF annotation file (gzipped)
-        --cis_window_mb   : Distance threshold in Mb for cis classification (default: 2.0, creates 4 Mb total window)
+        --cis_window_mb   : Distance threshold in Mb for cis classification (default: 4.0, creates 8 Mb total window)
         --outdir          : Output directory (default: results_cis_trans)
 ========================================================================================
 */
@@ -34,7 +34,7 @@ nextflow.enable.dsl = 2
 params.qtl_file = null
 params.cross2_file = null
 params.gtf_file = "Data/Mus_musculus.GRCm39.113.gtf.gz"
-params.cis_window_mb = 2.0
+params.cis_window_mb = 4.0
 params.outdir = "results_cis_trans"
 
 // Validate required parameters

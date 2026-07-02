@@ -20,3 +20,22 @@ logs
 GBRS_development_map.txt
 .nfs*
 nextflow_diet_interactive_resume.log
+
+# Project-specific / personal downstream analyses (not for publication).
+# Only broman_mixup_qc.nf, classify_cis_trans_eqtls.nf, and plot_eqtl_map.nf are published.
+/founder_alleles_eqtl.nf
+/heritability_eqtl.nf
+/summary_eqtl.nf
+/allelic_complexity_eqtl.nf
+/diet_concordance_eqtl.nf
+/eqtl_overview.nf
+/gxe_eqtl.nf
+/pheno_eqtl_colocalization.nf
+modules/analyses/founder_allele_contributions.nf
+modules/analyses/heritability_effect_size.nf
+modules/analyses/summary_eqtl_plots.nf
+modules/analyses/allelic_complexity.nf
+modules/analyses/diet_concordance.nf
+modules/analyses/gxe_eqtl.nf
+modules/analyses/pheno_eqtl_colocalization.nf
+modules/analyses/timbr.nf
