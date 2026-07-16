@@ -56,7 +56,7 @@ process FIND_PEAKS_CHR {
     thresh_63        <- permThresh[1, match(colnames(chr_scan), colnames(permThresh))]
     names(thresh_63) <- colnames(chr_scan)
 
-    peaks <- find_peaks(chr_scan, chr_gmap, threshold=thresh_63, drop=1.5, cores=1)
+    peaks <- find_peaks(chr_scan, chr_gmap, threshold=thresh_63, drop=1.8, cores=1)
     cat("Chr ${chr}:", nrow(peaks), "peaks above 63% threshold\\n")
 
     saveRDS(peaks, "peaks_chr_${chr}.rds")

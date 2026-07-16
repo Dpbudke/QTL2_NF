@@ -85,6 +85,11 @@ process VISUALIZE_BATCH {
     # ── Load shared data once ─────────────────────────────────────────────────
     cat("Loading shared data...\\n")
     alleleprobs  <- readRDS("${alleleprob_file}")
+    # Stabilize founder-allele effect estimates (scan1coef/scan1blup below) by zeroing
+    # near-zero founder probabilities at dropout loci. Does NOT change LOD scans, which use
+    # module 06 scan_results; QC 2026-07-16 (Temp/clean_genoprob_qc) confirmed <1% of eQTLs
+    # shift and only at known PWK-dropout phantom loci.
+    alleleprobs  <- clean_genoprob(alleleprobs, cores = n_cores)
     scan_results <- readRDS("${scan_results_file}")
     cross2       <- readRDS("${cross2_file}")
     kinship      <- readRDS("${kinship_file}")

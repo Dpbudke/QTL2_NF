@@ -312,6 +312,7 @@ The workflow detects prior progress by checking for on-disk artifacts in priorit
 **Key Functions**:
 - **High-Confidence QTL Focus**: Visualizes only 99% significant QTLs from Module 8 for maximum stringency
 - **Three Plot Types per QTL**: `lod` (LOD score curve), `coef` (scan1coef() founder allele coefficients), and `blup` (scan1blup() shrinkage estimates) — `blup` is generated for additive models only (see below)
+- **Cleaned Allele Probabilities for Effect Estimates**: Allele probabilities are passed through r/qtl2 `clean_genoprob()` before `scan1coef()`/`scan1blup()` to zero out near-zero founder probabilities at dropout loci, which otherwise destabilize founder-effect estimates. This affects only the `coef`/`blup` effect plots — LOD scans (Module 6) are unchanged; QC confirmed <1% of eQTLs shift and only at known founder-dropout phantom loci
 - **Multiple Zoom Levels per Plot Type**:
   - `lod/`: **cis** (±4 Mb around the peak), **chr** (whole chromosome), and **genome** (genome-wide across all chromosomes, ordered naturally 1..19, X)
   - `coef/`: **cis** (±4 Mb) and **chr** (whole chromosome) — no genome level, since scan1coef() founder effects are estimated per-chromosome

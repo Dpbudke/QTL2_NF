@@ -29,6 +29,7 @@ params.study_type = null      // Set via config default ('eQTL') or override (e.
 
 // Resume parameters
 params.resume_from = null  // Options: phenotype, genotype, control, cross2, prepare_scan, genome_scan, permutation, perm_aggregate, significant_qtls, visualize, timbr
+params.resume_to   = null  // Optional upper bound: stop AFTER this step (inclusive); same step names as resume_from
 params.input_dir = null    // Directory to load cached results from (defaults to outdir if not specified)
 
 // Print help message
@@ -215,14 +216,20 @@ def checkFileExists(filepath, description) {
 }
 
 def shouldRunStep(currentStep, resumeFrom) {
-    if (!resumeFrom) return true
-
     def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
                     'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr', 'eqtl_map']
 
     def currentIndex = stepOrder.indexOf(currentStep)
-    def resumeIndex = stepOrder.indexOf(resumeFrom)
 
+    // Optional upper bound: skip anything past params.resume_to (inclusive stop)
+    if (params.resume_to) {
+        def toIndex = stepOrder.indexOf(params.resume_to)
+        if (toIndex >= 0 && currentIndex > toIndex) return false
+    }
+
+    if (!resumeFrom) return true
+
+    def resumeIndex = stepOrder.indexOf(resumeFrom)
     return currentIndex >= resumeIndex
 }
 

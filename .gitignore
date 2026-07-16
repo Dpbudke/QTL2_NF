@@ -16,10 +16,13 @@ Results_w_outliers
 Results_final
 results_ain76
 Temp/
+.Rlib_extra/
 logs
 GBRS_development_map.txt
 .nfs*
 nextflow_diet_interactive_resume.log
+Data/Filtered_DOCHLN_GBRS_DEG_summary.xlsx
+Data/ensembl_biomart*
 
 # Project-specific / personal downstream analyses (not for publication).
 # Only broman_mixup_qc.nf, classify_cis_trans_eqtls.nf, and plot_eqtl_map.nf are published.
@@ -31,7 +34,10 @@ nextflow_diet_interactive_resume.log
 /eqtl_overview.nf
 /gxe_eqtl.nf
 /pheno_eqtl_colocalization.nf
+/publication_tables.nf
+/enrichment_eqtl.nf
 modules/analyses/founder_allele_contributions.nf
+modules/analyses/publication_tables.nf
 modules/analyses/heritability_effect_size.nf
 modules/analyses/summary_eqtl_plots.nf
 modules/analyses/allelic_complexity.nf
@@ -39,3 +45,6 @@ modules/analyses/diet_concordance.nf
 modules/analyses/gxe_eqtl.nf
 modules/analyses/pheno_eqtl_colocalization.nf
 modules/analyses/timbr.nf
+modules/analyses/enrichment.nf
+Data/enrichment_hallmark_mouse.csv
+Data/enrichment_kegg_mmu.csv

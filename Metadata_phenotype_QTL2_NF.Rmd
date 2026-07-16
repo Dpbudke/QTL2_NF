@@ -42,8 +42,11 @@ library(edgeR)
 
 ```{r}
 # Load data
-Metadata = read.xlsx("R_Data/DOCholine_AllBatches_Metadata_220202.xlsx")
-Phenotypes = read.csv("R_Data/DOCHLN_combined_counts.csv")
+Metadata = read.xlsx("Data/R_Data/DOCholine_AllBatches_Metadata_220202.xlsx")
+Phenotypes = read.csv("Data/R_Data/DOCHLN_combined_counts.csv")
+
+# 406 metadata samples 
+# 388 RNA-seq samples
 
 # 382 common samples
 ```
