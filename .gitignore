@@ -21,7 +21,7 @@ logs
 GBRS_development_map.txt
 .nfs*
 nextflow_diet_interactive_resume.log
-Data/Filtered_DOCHLN_GBRS_DEG_summary.xlsx
+Data/DOCHLN_GBRS_DEG_summary.xlsx
 Data/ensembl_biomart*
 
 # Project-specific / personal downstream analyses (not for publication).
@@ -36,6 +36,7 @@ Data/ensembl_biomart*
 /pheno_eqtl_colocalization.nf
 /publication_tables.nf
 /enrichment_eqtl.nf
+/chr12_tmao_candidates.nf
 modules/analyses/founder_allele_contributions.nf
 modules/analyses/publication_tables.nf
 modules/analyses/heritability_effect_size.nf
@@ -46,5 +47,7 @@ modules/analyses/gxe_eqtl.nf
 modules/analyses/pheno_eqtl_colocalization.nf
 modules/analyses/timbr.nf
 modules/analyses/enrichment.nf
+modules/analyses/chr12_tmao_candidates.nf
 Data/enrichment_hallmark_mouse.csv
 Data/enrichment_kegg_mmu.csv
+modules/analyses/chr12_tmao_candidates.R
