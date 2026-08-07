@@ -11,7 +11,9 @@ nextflow.enable.dsl = 2
 
     IMPORTANT: QTL positions in r/qtl2 are in centiMorgans (cM), not Megabases (Mb).
     This workflow requires the cross2 object to convert QTL positions from cM to Mb
-    using the genetic and physical maps before comparing to gene positions.
+    using the genetic and physical maps before comparing to gene positions. The peak
+    (qtl_pos_mb) and both LOD-drop CI bounds (ci_lo_mb / ci_hi_mb) are converted; the
+    original cM values are retained as qtl_pos_cM / ci_lo_cM / ci_hi_cM.
 
     Usage:
         nextflow run workflow_cis_trans_classification.nf \

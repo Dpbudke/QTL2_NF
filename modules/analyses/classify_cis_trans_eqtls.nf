@@ -35,15 +35,26 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     saveRDS(list(gmap = gmap, pmap = pmap), "qtl2_position_map.rds")
     cat("  Position map saved\\n")
 
-    # Convert QTL positions from cM to Mb — vectorized per chromosome
-    cat("Converting QTL positions from cM to Mb...\\n")
-    qtls[, pos_mb := NA_real_]
+    # Convert QTL peak positions AND confidence interval bounds from cM to Mb.
+    # find_peaks() reports pos/ci_lo/ci_hi on the same genetic map, so all three
+    # need the same gmap -> pmap interpolation before any Mb-scale comparison.
+    cat("Converting QTL positions and CIs from cM to Mb...\\n")
+    cm_cols <- intersect(c("pos", "ci_lo", "ci_hi"), names(qtls))
+    mb_cols <- paste0(cm_cols, "_mb")
+    qtls[, (mb_cols) := NA_real_]
     for (chr_name in intersect(unique(qtls\$chr), intersect(names(gmap), names(pmap)))) {
-        idx <- qtls\$chr == chr_name
-        qtls[idx, pos_mb := approx(gmap[[chr_name]], pmap[[chr_name]],
-                                   xout = pos, rule = 2)\$y]
+        idx <- which(qtls\$chr == chr_name)
+        for (j in seq_along(cm_cols)) {
+            set(qtls, i = idx, j = mb_cols[j],
+                value = approx(gmap[[chr_name]], pmap[[chr_name]],
+                               xout = qtls[[cm_cols[j]]][idx], rule = 2)\$y)
+        }
     }
     cat("  Converted", sum(!is.na(qtls\$pos_mb)), "of", nrow(qtls), "QTL positions\\n")
+    if (all(c("ci_lo_mb", "ci_hi_mb") %in% names(qtls))) {
+        qtls[, ci_width_mb := ci_hi_mb - ci_lo_mb]
+        cat("  Median CI width:", round(median(qtls\$ci_width_mb, na.rm = TRUE), 2), "Mb\\n")
+    }
 
     # Read and process GTF file
     cat("Reading GTF annotation...\\n")
@@ -84,6 +95,9 @@ process CLASSIFY_CIS_TRANS_EQTLS {
     setnames(qtl_classification, "chr.y", "gene_chr")
     setnames(qtl_classification, "pos", "qtl_pos_cM")
     setnames(qtl_classification, "pos_mb", "qtl_pos_mb")
+    # Make the cM-scale CI bounds explicit so they can't be mistaken for Mb
+    setnames(qtl_classification, "ci_lo", "ci_lo_cM", skip_absent = TRUE)
+    setnames(qtl_classification, "ci_hi", "ci_hi_cM", skip_absent = TRUE)
     setnames(qtl_classification, "start", "gene_start")
     setnames(qtl_classification, "end", "gene_end")
     setnames(qtl_classification, "strand", "gene_strand")
@@ -95,7 +109,7 @@ process CLASSIFY_CIS_TRANS_EQTLS {
                    "qtl_chr", "qtl_pos_cM", "qtl_pos_mb",
                    "gene_chr", "gene_start", "gene_end", "gene_strand", "gene_tss", "gene_tss_mb",
                    "distance_to_tss_mb", "eqtl_type",
-                   "lod", "ci_lo", "ci_hi",
+                   "lod", "ci_lo_mb", "ci_hi_mb", "ci_width_mb", "ci_lo_cM", "ci_hi_cM",
                    "signif_63", "signif_90", "signif_95", "signif_99",
                    "study", "significance_level")
 

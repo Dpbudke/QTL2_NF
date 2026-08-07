@@ -166,6 +166,7 @@ Standard GTF format (gzipped or uncompressed):
    - Full classification results for all QTLs
    - Columns include:
      - QTL information (chr, position, LOD score)
+     - 1.8-LOD-drop CI bounds in Mb (`ci_lo_mb`, `ci_hi_mb`, `ci_width_mb`) and cM (`ci_lo_cM`, `ci_hi_cM`, renamed from `ci_lo`/`ci_hi`)
      - Gene information (chr, start, end, strand, TSS)
      - Distance to TSS (in Mb)
      - Classification (cis/trans/unknown_gene)

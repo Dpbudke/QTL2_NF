@@ -517,7 +517,7 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 
 **Process Workflow**:
 1. Load significant QTLs (`GATHER_PEAKS` output) and the filtered cross2 object
-2. Convert QTL peak positions from cM → Mb using each chromosome's gmap/pmap (saved as `qtl2_position_map.rds` for reuse)
+2. Convert QTL peak positions and 1.8-LOD-drop CI bounds (`ci_lo`/`ci_hi`) from cM → Mb using each chromosome's gmap/pmap (saved as `qtl2_position_map.rds` for reuse)
 3. Parse Ensembl GTF (`params.gtf_file`) for gene records and compute strand-aware TSS (start for `+`, end for `-`)
 4. Join QTLs to genes by `lodcolumn` (gene_id) and compute `distance_to_tss_mb`
 5. Classify each QTL:
@@ -532,7 +532,7 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 - Gzipped Ensembl GTF (`params.gtf_file`, default `Data/Mus_musculus.GRCm39.113.gtf.gz`)
 
 **Output Files** (`results/00_analyses/`):
-- **eqtl_cis_trans_classification.csv**: Per-QTL annotation with `qtl_chr`, `qtl_pos_cM`, `qtl_pos_mb`, `gene_chr`, `gene_tss`, `gene_tss_mb`, `distance_to_tss_mb`, `eqtl_type`, plus LOD/CI/significance columns
+- **eqtl_cis_trans_classification.csv**: Per-QTL annotation with `qtl_chr`, `qtl_pos_cM`, `qtl_pos_mb`, `gene_chr`, `gene_tss`, `gene_tss_mb`, `distance_to_tss_mb`, `eqtl_type`, the 1.8-LOD-drop CI in Mb (`ci_lo_mb`, `ci_hi_mb`, `ci_width_mb`) and cM (`ci_lo_cM`, `ci_hi_cM`), plus LOD/significance columns
 - **eqtl_classification_summary.txt**: Counts, mean LOD, median distance per `eqtl_type`, plus cross-tabulation by significance level
 - **qtl2_position_map.rds**: Reusable gmap/pmap list for downstream cM↔Mb conversion
 
