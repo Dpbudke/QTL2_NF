@@ -1,0 +1,59 @@
+# Build the Dockerfile and publish it as ghcr.io/bjbennettlab/qtl2_nf:<version> when a version tag (v1.0.1) is
+# pushed. A published version is never rebuilt: change the image by tagging a new version. Actions are pinned to
+# commits. The GitHub token of the run pushes the image; no stored secret is used.
+name: container image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version to build (for example 1.0.1); must match an existing tag v<version>"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    # Only the lab's copy publishes to the lab's registry.
+    if: github.repository_owner == 'BJBennettlab'
+    runs-on: ubuntu-24.04
+    # About 350 R packages compile from source.
+    timeout-minutes: 340
+    steps:
+      - name: Version
+        id: version
+        run: |
+          v="${{ inputs.version || github.ref_name }}"
+          v="${v#v}"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a version: $v" >&2; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: v${{ steps.version.outputs.version }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse to replace a published version
+        run: |
+          if docker manifest inspect "ghcr.io/bjbennettlab/qtl2_nf:${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "qtl2_nf:${{ steps.version.outputs.version }} is already published; tag a new version" >&2
+            exit 1
+          fi
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/bjbennettlab/qtl2_nf:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.authors=Dawson Budke

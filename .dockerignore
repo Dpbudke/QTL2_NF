@@ -1,0 +1,3 @@
+# The image holds software only. The build sees just the package list, so no data or results can be copied into it.
+*
+!image_r_packages_1.0.0.tsv

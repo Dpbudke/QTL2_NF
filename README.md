@@ -583,8 +583,22 @@ mkdir -p singularity_cache
 ln -s /project/do2_projects/containers/qtl2_nf_1.0.0.sif singularity_cache/dpbudke-qtl2-pipeline-latest.img
 ```
 
+Anywhere else, pull the same file from the lab's registry (the preflight check confirms it is byte-identical):
+```bash
+apptainer pull singularity_cache/dpbudke-qtl2-pipeline-latest.img oras://ghcr.io/bjbennettlab/qtl2_nf:1.0.0
+```
+
 A new pull of `docker://dpbudke/qtl2-pipeline:latest` makes a different file (and may hold newer packages), so the
 check refuses it. To run with another image, pass `--sif <file> --sif_sha256 <its SHA-256>` and record why.
+
+The `Dockerfile` rebuilds that image's software with every R package pinned to its 1.0.0 version
+(`image_r_packages_1.0.0.tsv`). When a version tag (`v1.0.1`) is pushed to the lab's repository, GitHub Actions builds
+it and publishes `ghcr.io/bjbennettlab/qtl2_nf:<version>`. Use a rebuilt image only after a pilot gene set gives the
+same LOD scores as 1.0.0, then convert it once and pass its checksum:
+```bash
+apptainer pull qtl2_nf_1.0.1.sif docker://ghcr.io/bjbennettlab/qtl2_nf:1.0.1
+sha256sum qtl2_nf_1.0.1.sif   # pass with --sif qtl2_nf_1.0.1.sif --sif_sha256 <this value>
+```
 
 **3. No path configuration required**
 
