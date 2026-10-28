@@ -1,5 +1,7 @@
 # QTL2_NF Pipeline
 
+By Dawson Budke ([@Dpbudke](https://github.com/Dpbudke)), Bennett Lab.
+
 A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed for high-throughput quantitative trait loci mapping in Diversity Outbred (DO) and other multiparental populations. This pipeline supports comprehensive multi-phenotype analyses including clinical phenotype QTLs, expression QTLs (eQTLs), metabolite QTLs (mQTLs), and other high-dimensional molecular trait mapping applications.
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
