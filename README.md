@@ -263,6 +263,7 @@ Each coordinator instance:
 - Has internal resume logic: skips any batch whose output `.rds` file already exists and is non-empty
 - Writes a stage-specific sentinel file (`COORDINATOR_screen_COMPLETE` or `COORDINATOR_full_COMPLETE`) when all batches for that stage complete, which triggers the corresponding aggregation step
 - Because each coordinator is itself a long-lived SLURM job, it is completely independent of the Nextflow driver session; driver interruption does not stop batch work
+- A run longer than the 21-day wall time continues with Nextflow's `-resume`; the new coordinator skips finished batches. Before resuming, cancel the old coordinator and the queued tasks of its array (`scancel --state=PENDING <array job>`) and let running tasks finish. When several models are launched from the same folder, resume each with its own session ID (`-resume <session id>`, listed by `nextflow log`), since a bare `-resume` picks the folder's most recent run
 
 **Resume Logic (five cases)**
 
