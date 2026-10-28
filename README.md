@@ -576,7 +576,7 @@ cd QTL2_NF
 
 Every process and permutation worker runs in one Apptainer image, `--sif` (default
 `singularity_cache/dpbudke-qtl2-pipeline-latest.img`, gitignored). The run checks its SHA-256 against `--sif_sha256`
-before it starts. The default checksum is the image the DO_Chln 2025 and 2026 runs used. On Ceres the lab keeps that
+before it starts. The default checksum is the image the lab's 2025 and 2026 DO eQTL runs used. On Ceres the lab keeps that
 image at `/project/do2_projects/containers/qtl2_nf_1.0.0.sif`:
 ```bash
 mkdir -p singularity_cache
@@ -618,7 +618,7 @@ no edits:
 | `--slurm_partition` | `ceres` | partition for every job |
 | `--notify_email` | none | address for the end-of-run email |
 | `--perm_max_concurrent` | 200 | permutation worker jobs (48 CPUs, 200 GB each) kept in the queue at once |
-| `--sif`, `--sif_sha256` | the DO_Chln image and its checksum | container image for every process, checked before the run |
+| `--sif`, `--sif_sha256` | the lab's image and its checksum | container image for every process, checked before the run |
 | `--scinet_check` | `true` (`false` in the docker, local and test profiles) | the preflight check below |
 
 Lower `--perm_max_concurrent` when others share your Slurm limits: on Ceres, 40 workers use 1,920 CPUs and 8 TB.
