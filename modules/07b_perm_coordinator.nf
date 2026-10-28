@@ -229,7 +229,7 @@ RSCRIPT
     log "Phenotypes: \${NUM_PHENOS}  |  Batches/pheno: \${N_BATCHES}  |  Total: \${TOTAL_BATCHES}"
 
     # ── Constants ────────────────────────────────────────────────────────────
-    MAX_CONCURRENT=200
+    MAX_CONCURRENT=${params.perm_max_concurrent}
     MAX_ARRAY_SIZE=10000
     MAX_RETRIES=2
 
@@ -320,8 +320,8 @@ ARRAYEOF
 
         local JOB_ID
         JOB_ID=\$(sbatch \
-            --account=do2_projects \
-            --partition=ceres \
+            --account=${params.slurm_account} \
+            --partition=${params.slurm_partition} \
             --cpus-per-task=48 \
             --mem=200G \
             --time=2:00:00 \
