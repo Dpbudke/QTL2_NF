@@ -49,7 +49,7 @@ process PERM_COORDINATOR {
     STAGE_LABEL="${stage_label}"
     N_PERMS=${n_perms_per_batch}
     N_BATCHES=${n_batches_per_pheno}
-    SIF="\${PROJECT_DIR}/singularity_cache/dpbudke-qtl2-pipeline-latest.img"
+    SIF="${params.sif}"
     PERM_DIR="\${PROJECT_DIR}/\${OUTDIR}/07_permutation_testing"
     BATCH_DIR="\${PERM_DIR}/batches_\${STAGE_LABEL}"
     JOBS_LOG_DIR="\${PERM_DIR}/coordinator_job_logs_\${STAGE_LABEL}"

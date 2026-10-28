@@ -90,6 +90,15 @@ if (params.help) {
     exit 0
 }
 
+// Preflight (lib/ScinetCheck.groovy): SCINet project, run folders, container image and Nextflow version
+def preflightProblems = ScinetCheck.problems(params, workflow, nextflow.version.toString())
+if (preflightProblems) {
+    error "Preflight check failed:\n  - " + preflightProblems.join("\n  - ")
+}
+if (params.scinet_check != false) {
+    log.info "Preflight check passed: Slurm account ${params.slurm_account}, image ${params.sif}"
+}
+
 /*
 ========================================================================================
     PARAMETER VALIDATION
