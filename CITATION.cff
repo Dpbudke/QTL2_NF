@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use QTL2_NF, please cite it as below."
+title: "QTL2_NF: a Nextflow pipeline for multiparental mouse QTL analysis with R/qtl2"
+authors:
+  - family-names: Budke
+    given-names: Dawson
+    affiliation: "Bennett Lab"
+repository-code: "https://github.com/Dpbudke/QTL2_NF"
+type: software

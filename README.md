@@ -4,7 +4,7 @@ By Dawson Budke ([@Dpbudke](https://github.com/Dpbudke)), Bennett Lab.
 
 A Nextflow pipeline for multiparental mouse QTL analysis using r/qtl2, designed for high-throughput quantitative trait loci mapping in Diversity Outbred (DO) and other multiparental populations. This pipeline supports comprehensive multi-phenotype analyses including clinical phenotype QTLs, expression QTLs (eQTLs), metabolite QTLs (mQTLs), and other high-dimensional molecular trait mapping applications.
 
-[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
+[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-25.04-23aa62.svg)](https://www.nextflow.io/)
 [![Docker](https://img.shields.io/badge/docker-enabled-brightgreen.svg)](https://www.docker.com/)
 
 ## Overview
@@ -572,16 +572,19 @@ git clone <repo-url> QTL2_NF
 cd QTL2_NF
 ```
 
-**2. Pull the container image (required)**
+**2. Get the container image (required)**
 
-The `singularity_cache/` directory is gitignored because the `.img` file is a large binary. Create the directory and pull the image manually:
+Every process and permutation worker runs in one Apptainer image, `--sif` (default
+`singularity_cache/dpbudke-qtl2-pipeline-latest.img`, gitignored). The run checks its SHA-256 against `--sif_sha256`
+before it starts. The default checksum is the image the DO_Chln 2025 and 2026 runs used. On Ceres the lab keeps that
+image at `/project/do2_projects/containers/qtl2_nf_1.0.0.sif`:
 ```bash
-mkdir singularity_cache
-apptainer pull singularity_cache/dpbudke-qtl2-pipeline-latest.img \
-    docker://dpbudke/qtl2-pipeline:latest
+mkdir -p singularity_cache
+ln -s /project/do2_projects/containers/qtl2_nf_1.0.0.sif singularity_cache/dpbudke-qtl2-pipeline-latest.img
 ```
 
-This is the only required setup step. No configuration changes are needed.
+A new pull of `docker://dpbudke/qtl2-pipeline:latest` makes a different file (and may hold newer packages), so the
+check refuses it. To run with another image, pass `--sif <file> --sif_sha256 <its SHA-256>` and record why.
 
 **3. No path configuration required**
 
@@ -592,13 +595,14 @@ All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable
 ### Prerequisites
 
 **Software Requirements**:
-- **Nextflow** ≥ 23.04.0
+- **Nextflow** 25.04 (the lab's runs use 25.04.6; start runs with `NXF_VER=25.04.6` or that release's binary). Other
+  releases stop at the preflight check unless `--allow_untested_nextflow true` is given.
 - **Apptainer/Singularity** (for HPC environments)
 - **Docker** (for local development)
 - **SLURM** workload manager with array job support
 
 **Container Requirements**:
-- Access to Docker Hub or pre-pulled container: `dpbudke/qtl2-pipeline:latest`
+- The image above (Docker Hub `dpbudke/qtl2-pipeline` for local Docker runs)
 - Singularity cache directory with sufficient storage (≥50GB)
 
 ### Quick Start Guide
@@ -610,10 +614,12 @@ no edits:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `--slurm_account` | `do2_projects` | account for every job, including the permutation workers |
+| `--slurm_account` | none, required | SCINet project (Slurm account) for every job, including the permutation workers; Bennett lab: `do2_projects` |
 | `--slurm_partition` | `ceres` | partition for every job |
 | `--notify_email` | none | address for the end-of-run email |
 | `--perm_max_concurrent` | 200 | permutation worker jobs (48 CPUs, 200 GB each) kept in the queue at once |
+| `--sif`, `--sif_sha256` | the DO_Chln image and its checksum | container image for every process, checked before the run |
+| `--scinet_check` | `true` (`false` in the docker, local and test profiles) | the preflight check below |
 
 Lower `--perm_max_concurrent` when others share your Slurm limits: on Ceres, 40 workers use 1,920 CPUs and 8 TB.
 
@@ -632,7 +638,8 @@ ls Data/  # Should show your phenotype.csv and FinalReport*.txt files
 3. **Pipeline Execution**:
 ```bash
 # Full pipeline execution
-nextflow run main.nf \
+NXF_VER=25.04.6 nextflow run main.nf \
+  --slurm_account <your SCINet project> \
   --phenotype_file Data/your_phenotypes.csv \
   --finalreport_files 'Data/FinalReport*.txt' \
   --study_prefix YourStudy \
@@ -643,6 +650,18 @@ tail -f .nextflow.log
 ```
 
 ### Running on SCINet Ceres
+
+A SCINet project is the Slurm account, `/project/<project>` and `/90daydata/<project>` at once, and one person can
+belong to several. Before any job starts, `main.nf`, `main_resume.nf` and `main_broman_mixup_qc.nf` check
+(`lib/ScinetCheck.groovy`) that `--slurm_account` is set and is one of your accounts, that the launch, work and output
+folders are under that project's `/project` or `/90daydata`, that the image matches its checksum, and that Nextflow
+is 25.04. The run stops with the list of problems if any check fails. For example, for the Bennett lab:
+
+```bash
+NXF_VER=25.04.6 nextflow run main.nf -profile standard --slurm_account do2_projects \
+  --phenotype_file Data/your_phenotypes.csv --finalreport_files 'Data/*FinalReport.txt' \
+  --study_prefix YourStudy --analysis_type Diet_additive
+```
 
 - Launch from the pipeline folder itself and keep `--outdir` relative: the permutation coordinator finds its
   files under the launch folder.
@@ -655,6 +674,8 @@ tail -f .nextflow.log
 - Give each concurrent run its own work folder (`workDir` in a `-c` config) and log (`nextflow -log <file> run ...`).
 
 ## Usage Examples
+
+The examples leave out `NXF_VER=25.04.6` and `--slurm_account <your SCINet project>`; add both on SCINet.
 
 ### Full Pipeline Execution
 
