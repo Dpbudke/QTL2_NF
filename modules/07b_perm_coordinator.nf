@@ -205,7 +205,10 @@ perm_time <- as.numeric(difftime(Sys.time(), perm_start, units = "mins"))
 cat("scan1perm() complete in", round(perm_time, 2), "minutes\\n")
 
 out <- data.frame(perm, check.names = FALSE)
-saveRDS(out, out_file)
+# Write under a temporary name and rename, so a task stopped mid-write never leaves a partial .rds counted as done
+tmp_file <- paste0(out_file, ".tmp")
+saveRDS(out, tmp_file)
+stopifnot(file.rename(tmp_file, out_file))
 
 total_time <- as.numeric(difftime(Sys.time(), batch_start, units = "mins"))
 cat("\\n===========================================\\n")
@@ -230,8 +233,14 @@ RSCRIPT
 
     # ── Constants ────────────────────────────────────────────────────────────
     MAX_CONCURRENT=${params.perm_max_concurrent}
-    MAX_ARRAY_SIZE=10000
+    MAX_ARRAY_SIZE=${params.perm_wave_size ?: 10000}
     MAX_RETRIES=2
+    # Every array task counts against the Slurm account's cap on queued jobs (30,000 per account on Ceres), which all
+    # runs on the account share. A wave refused for that reason is resubmitted every SUBMIT_WAIT seconds, up to
+    # SUBMIT_TRIES times; any other sbatch error stops the coordinator at once.
+    SUBMIT_WAIT=900
+    SUBMIT_TRIES=96
+    SBATCH_ERR="\${PERM_DIR}/sbatch_\${STAGE_LABEL}.err"
 
     # ── Stage-specific paths ─────────────────────────────────────────────────
     STATUS_FILE="\${PERM_DIR}/COORDINATOR_STATUS_\${STAGE_LABEL}.txt"
@@ -329,7 +338,7 @@ ARRAYEOF
             --output="\${JOBS_LOG_DIR}/\${STUDY_PREFIX}_\${LABEL}_%a.log" \
             --array="1-\${N}%\${MAX_CONCURRENT}" \
             --wrap="bash '\${ARRAY_WORKER}' '\${MANIFEST}' '\${SIF}' '\${WORKER_SCRIPT}' '\${STUDY_PREFIX}' '\${PROJECT_DIR}' '\${OUTDIR}' '\${INTERACTIVE_COVAR}' '\${STAGE_LABEL}' '\${N_PERMS}'" \
-            2>/dev/null | awk '{print \$NF}')
+            2>"\${SBATCH_ERR}" | awk '{print \$NF}')
 
         [[ "\${JOB_ID}" =~ ^[0-9]+\$ ]] && echo "\${JOB_ID}" || echo ""
     }
@@ -374,9 +383,16 @@ ARRAYEOF
 
         log "--- Wave \${WAVE}: \${SLICE} array tasks (of \${N_PENDING} remaining), \${MAX_CONCURRENT} concurrent ---"
         ARRAY_JID=\$(submit_wave "w\${WAVE}" "\${MANIFEST}" "\${SLICE}")
+        TRY=1
+        while [[ -z "\${ARRAY_JID}" && \${TRY} -lt \${SUBMIT_TRIES} ]] && grep -q -i -E "MaxSubmit|submit limit|temporarily|timed out" "\${SBATCH_ERR}" 2>/dev/null; do
+            log "sbatch refused wave \${WAVE} (try \${TRY} of \${SUBMIT_TRIES}): \$(tail -n 1 "\${SBATCH_ERR}"); retrying in \${SUBMIT_WAIT} s"
+            sleep "\${SUBMIT_WAIT}"
+            TRY=\$((TRY+1))
+            ARRAY_JID=\$(submit_wave "w\${WAVE}" "\${MANIFEST}" "\${SLICE}")
+        done
 
         if [[ -z "\${ARRAY_JID}" ]]; then
-            log "ERROR: sbatch failed for wave \${WAVE} — aborting"
+            log "ERROR: sbatch failed for wave \${WAVE} — aborting: \$(tail -n 2 "\${SBATCH_ERR}" 2>/dev/null | tr '\\n' ' ')"
             exit 1
         fi
         log "Wave \${WAVE} submitted: array job \${ARRAY_JID}"

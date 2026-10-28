@@ -632,10 +632,14 @@ no edits:
 | `--slurm_partition` | `ceres` | partition for every job |
 | `--notify_email` | none | address for the end-of-run email |
 | `--perm_max_concurrent` | 200 | permutation worker jobs (48 CPUs, 200 GB each) kept in the queue at once |
+| `--perm_wave_size` | 10000 | permutation tasks per Slurm array; all of them count against the account's queued-job cap |
 | `--sif`, `--sif_sha256` | the lab's image and its checksum | container image for every process, checked before the run |
 | `--scinet_check` | `true` (`false` in the docker, local and test profiles) | the preflight check below |
 
 Lower `--perm_max_concurrent` when others share your Slurm limits: on Ceres, 40 workers use 1,920 CPUs and 8 TB.
+Ceres also caps each account at 30,000 queued jobs, and every array task counts, so runs started together need
+`--perm_wave_size` small enough that their waves fit (for example 5000 for four models). A wave refused for that cap
+is resubmitted every 15 minutes for up to a day.
 
 2. **Data Preparation**:
 ```bash
