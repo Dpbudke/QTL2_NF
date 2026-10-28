@@ -233,6 +233,13 @@ def shouldRunStep(currentStep, resumeFrom) {
     return currentIndex >= resumeIndex
 }
 
+// True when --resume_to stops the run before this step: the step neither runs nor loads earlier outputs
+def stopsBefore(step) {
+    def stepOrder = ['phenotype', 'genotype', 'control', 'cross2', 'prepare_scan',
+                    'genome_scan', 'regional_filter', 'permutation', 'perm_aggregate', 'significant_qtls', 'visualize', 'timbr', 'eqtl_map']
+    return params.resume_to && stepOrder.indexOf(step) > stepOrder.indexOf(params.resume_to)
+}
+
 // Function to check if we should load files (step was skipped) or use process outputs (step ran)
 def shouldLoadFromFiles(currentStep, resumeFrom) {
     if (!resumeFrom) return false
@@ -464,6 +471,8 @@ workflow {
             ch_filtered_phenotypes = Channel.fromPath(checkFileExists("${input_dir}/06_qtl_analysis/${params.study_prefix}_filtered_phenotypes.txt", "filtered phenotypes"))
         }
 
+        // Everything after the genome scan; skipped when --resume_to stops at genome_scan or earlier
+        if (!stopsBefore('regional_filter')) {
         // MODULE 6b: Optional Regional QTL Filtering (before permutation testing)
         def filtered_phenos_for_perm
         def regional_filter_file = "${input_dir}/06b_regional_filtering/${params.study_prefix}_regional_filtered_phenotypes.txt"
@@ -692,6 +701,9 @@ workflow {
             TIMBR_ANALYSIS.out.run_report.view     { "TIMBR run report: $it" }
         }
 
+        } else {
+            log.info "Stopping after ${params.resume_to} (--resume_to)"
+        }
     } else {
         log.info "Skipping genotype-dependent modules - no FinalReport files specified"
     }
