@@ -5,5 +5,5 @@ authors:
   - family-names: Budke
     given-names: Dawson
     affiliation: "Bennett Lab"
-repository-code: "https://github.com/Dpbudke/QTL2_NF"
+repository-code: "https://github.com/BJBennettlab/QTL2_NF"
 type: software

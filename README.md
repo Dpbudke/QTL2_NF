@@ -568,7 +568,7 @@ Based on Broman et al. (2015) G3 and Westra et al. (2011), this module identifie
 
 **1. Clone the repository**
 ```bash
-git clone <repo-url> QTL2_NF
+git clone https://github.com/BJBennettlab/QTL2_NF.git
 cd QTL2_NF
 ```
 

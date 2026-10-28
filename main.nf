@@ -4,7 +4,7 @@
 ========================================================================================
     QTL2_NF: Nextflow pipeline for multiparental mouse QTL analysis
 ========================================================================================
-    Github : https://github.com/Dpbudke/QTL2_NF
+    Github : https://github.com/BJBennettlab/QTL2_NF (original: https://github.com/Dpbudke/QTL2_NF)
     Author : Dpbudke
 ----------------------------------------------------------------------------------------
 */
