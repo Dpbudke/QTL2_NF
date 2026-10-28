@@ -326,6 +326,11 @@ workflow {
     // Continue only if we have genotype data
     if (params.finalreport_files || params.resume_from) {
 
+        // Founder genotypes and maps come from Data/GM, as in main.nf (module 3 no longer publishes them)
+        ch_founder_genos = Channel.fromPath("${projectDir}/Data/GM/GM_foundergeno*.csv", checkIfExists: true).collect()
+        ch_genetic_maps = Channel.fromPath("${projectDir}/Data/GM/GM_gmap*.csv", checkIfExists: true).collect()
+        ch_physical_maps = Channel.fromPath("${projectDir}/Data/GM/GM_pmap*.csv", checkIfExists: true).collect()
+
         // MODULE 3: Control File Generation
         if (shouldRunStep('control', params.resume_from)) {
             log.info "Running GENERATE_CONTROL_FILE"
@@ -333,23 +338,20 @@ workflow {
             GENERATE_CONTROL_FILE(
                 ch_pheno,
                 ch_covar,
-                ch_geno_files,
+                ch_geno_files.collect(),
                 ch_allele_codes,
+                ch_founder_genos,
+                ch_genetic_maps,
+                ch_physical_maps,
                 ch_study_prefix
             )
 
             ch_control_file = GENERATE_CONTROL_FILE.out.control_file
-            ch_founder_genos = GENERATE_CONTROL_FILE.out.founder_genos
-            ch_genetic_maps = GENERATE_CONTROL_FILE.out.genetic_maps
-            ch_physical_maps = GENERATE_CONTROL_FILE.out.physical_maps
 
             GENERATE_CONTROL_FILE.out.control_file.view { "Control file created: $it" }
         } else {
             log.info "Skipping GENERATE_CONTROL_FILE - loading from existing files"
             ch_control_file = Channel.fromPath(checkFileExists("${input_dir}/03_control_file_generation/${params.study_prefix}_control.json", "control file"))
-            ch_founder_genos = Channel.fromPath("${input_dir}/03_control_file_generation/GM_foundergeno*.csv").collect()
-            ch_genetic_maps = Channel.fromPath("${input_dir}/03_control_file_generation/GM_gmap*.csv").collect()
-            ch_physical_maps = Channel.fromPath("${input_dir}/03_control_file_generation/GM_pmap*.csv").collect()
         }
 
         // MODULE 4: Cross2 Object Creation
