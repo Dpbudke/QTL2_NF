@@ -604,11 +604,18 @@ All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable
 ### Quick Start Guide
 
 1. **Environment Setup**:
-```bash
-# Configure HPC settings
-# Edit nextflow.config to match your SLURM account and resource allocations
-# Update "Pipeline-level email notifications" email address 
-```
+
+Slurm account, partition, end-of-run email and permutation concurrency are settings, so `nextflow.config` needs
+no edits:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `--slurm_account` | `do2_projects` | account for every job, including the permutation workers |
+| `--slurm_partition` | `ceres` | partition for every job |
+| `--notify_email` | none | address for the end-of-run email |
+| `--perm_max_concurrent` | 200 | permutation worker jobs (48 CPUs, 200 GB each) kept in the queue at once |
+
+Lower `--perm_max_concurrent` when others share your Slurm limits: on Ceres, 40 workers use 1,920 CPUs and 8 TB.
 
 2. **Data Preparation**:
 ```bash
@@ -634,6 +641,18 @@ nextflow run main.nf \
 # Monitor progress
 tail -f .nextflow.log
 ```
+
+### Running on SCINet Ceres
+
+- Launch from the pipeline folder itself and keep `--outdir` relative: the permutation coordinator finds its
+  files under the launch folder.
+- Run the Nextflow controller in a Slurm job (2 CPUs, 8 GB, several days), not on a login node. Each step is then
+  its own Slurm job, and the permutation coordinator submits its workers.
+- The lab's runs use Nextflow 25.04.6 with `module load java/21 apptainer/1.4.1`. Apptainer on Ceres mounts
+  `/project` and `/90daydata` inside the container without extra binds.
+- `Metadata_phenotype_QTL2_NF.Rmd` builds the eQTL input. It needs R with edgeR and openxlsx, which the pipeline
+  container does not include.
+- Give each concurrent run its own work folder (`workDir` in a `-c` config) and log (`nextflow -log <file> run ...`).
 
 ## Usage Examples
 
