@@ -37,10 +37,18 @@ Defined in preparatory R Markdown workflow (`Metadata_phenotype_QTL2_NF.Rmd`)
 
 **Optional Covariates**:
 - **batch**: Experimental batch identifier for batch effect correction
-- **Diet**: Treatment group (e.g., "hc", "lc" for high/low cholesterol)
+- **Diet**: Treatment group. DO_Chln: `ain76` (the AIN-76A control diet) and `hc` (high choline). Older DO_Chln
+  metadata records the control diet as `ain76` in batches 1 to 3 and `ain76a` in batches 4 and 5; it is one diet, and
+  `Metadata_phenotype_QTL2_NF.Rmd` writes both as `ain76`
 - **coat_color**: Coat color measurements for validation analyses
 - **Age**: Age at measurement or sacrifice
 - Additional experimental factors as needed
+
+**Text covariates and their levels**: each text covariate (Diet, batch, Sex) becomes one model column per level after
+the first, so two labels for the same group make two groups without any error. Step 01 writes every text
+covariate's levels to `01_phenotype_processing/validation_report.txt`, and `--covariate_levels` (JSON, e.g.
+`'{"Diet":["ain76","hc"]}'`) stops the run when a covariate has any other value. The four analysis types set Diet to
+`ain76` and `hc`. Check the levels before a new study's first run.
 
 **Single-Sex Studies**:
 For studies with only one sex (all-female or all-male cohorts), the `sex` column must still be present in the covariate file because r/qtl2 uses it as cross metadata for X chromosome handling — it is not only a statistical covariate. Do not omit this column from the input file. If the `sex` column is absent, use `single_sex = 'female'` (or `'male'`) in `nextflow.config` and the pipeline will add it automatically. See the `--single_sex` parameter documentation in the Configuration section for full details.
@@ -1107,6 +1115,8 @@ apptainer {
 - `--lod_threshold`: LOD score threshold for permutation pre-filtering (default: 7.0)
 - `--outdir`: Output directory path (default: results)
 - `--sample_filter`: JSON string for sample subsetting (e.g., '{"Sex":["male"],"Diet":["hc"]}')
+- `--covariate_levels`: JSON of the allowed values of text covariates (e.g., '{"Diet":["ain76","hc"]}'); any other
+  value, or a missing value, stops step 01 before the sample filter. The analysis types set Diet to `ain76`, `hc`
 - `--single_sex`: Set to `'female'` or `'male'` for single-sex studies (default: null). See details below.
 - `--test_mode`: Development mode - process chromosome 2 only (default: false)
 

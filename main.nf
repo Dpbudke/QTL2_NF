@@ -26,8 +26,8 @@ def helpMessage() {
         --study_prefix       Study identifier prefix for output files
 
     Optional Arguments:
-        --analysis_type     Analysis preset that auto-configures outdir, sample_filter, exclude_covariates,
-                            and interactive_covar. Valid values:
+        --analysis_type     Analysis preset that auto-configures outdir, sample_filter, covariate_levels,
+                            exclude_covariates and interactive_covar. Valid values:
                               - Diet_additive    : Full cohort, additive model (default settings)
                               - Diet_interactive : Full cohort, GxE interaction with Diet covariate
                               - AIN76_only       : AIN76 diet subset, excludes Diet covariate
@@ -40,6 +40,8 @@ def helpMessage() {
         --test_mode         Positive control: chr 2 only, coat_color as phenotype [default: false]
         --lod_threshold     LOD threshold for filtering QTLs before permutation testing [default: 7.0]
         --sample_filter     JSON filter for sample subsetting by covariates (e.g., '{"Sex":["male"],"Diet":["hc"]}') [default: null]
+        --covariate_levels  JSON of the allowed values of text covariates; any other value stops step 01
+                            (e.g., '{"Diet":["ain76","hc"]}') [default: null; the four analysis types set Diet to ain76, hc]
         --exclude_covariates  Comma-separated covariates to exclude from model (e.g., 'Diet,batch') [default: null]
         --single_sex        Set to 'female' or 'male' for single-sex studies; ensures sex column is present in the cross object even if missing or excluded [default: null]
         --interactive_covar Covariate to test as interactive term for GxE analysis (e.g., 'Diet') [default: null]
@@ -142,8 +144,14 @@ def effective_outdir = params.outdir ?:
         : 'results')
 
 def effective_sample_filter = params.sample_filter ?: (
-    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76", "ain76a"]}' :
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76"]}' :
     params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
+)
+
+// The DO_Chln presets expect one label per diet: ain76 (AIN-76A, which older metadata also records as ain76a)
+// and hc (high choline). Any other Diet value stops step 01; see --covariate_levels.
+def effective_covariate_levels = params.covariate_levels ?: (
+    params.analysis_type ? '{"Diet": ["ain76", "hc"]}' : null
 )
 
 def effective_exclude_covariates = params.exclude_covariates ?: (
@@ -170,6 +178,7 @@ if (params.analysis_type) {
     Auto-configured settings for ${params.analysis_type}:
         outdir             : ${effective_outdir}
         sample_filter      : ${effective_sample_filter ?: 'null (full cohort)'}
+        covariate_levels   : ${effective_covariate_levels ?: 'null (not checked)'}
         exclude_covariates : ${effective_exclude_covariates ?: 'null'}
         interactive_covar  : ${effective_interactive_covar ?: 'null (additive model)'}
     """.stripIndent()
@@ -226,7 +235,8 @@ workflow {
         ch_study_prefix,
         Channel.value(effective_sample_filter ?: "null"),
         Channel.value(effective_exclude_covariates ?: "null"),
-        Channel.value(params.single_sex ?: "null")
+        Channel.value(params.single_sex ?: "null"),
+        Channel.value(effective_covariate_levels ?: "null")
     )
     
     // MODULE 2: Genotype Processing (if FinalReport files provided)

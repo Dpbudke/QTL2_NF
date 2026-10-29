@@ -225,6 +225,18 @@ if(length(common_samples) > 0) {
   cat("First few phenotype samples:", head(phenotype_samples, 5), "\n")
 }
 
+# Step 6b: One label per diet. The metadata records the AIN-76A control diet as "ain76" in batches 1 to 3 and
+# "ain76a" in batches 4 and 5. It is one diet (every mouse ate AIN-76A for two weeks, then was randomized to high
+# choline or kept on AIN-76A), so both are written as "ain76". With two labels, model.matrix would make the control
+# mice two diet groups. The pipeline's analysis types accept only ain76 and hc (--covariate_levels).
+cat("Diet values before standardization:\n")
+print(table(Combined_data$Diet, useNA = "ifany"))
+Combined_data$Diet <- tolower(trimws(Combined_data$Diet))
+Combined_data$Diet[Combined_data$Diet == "ain76a"] <- "ain76"
+cat("Diet values after standardization:\n")
+print(table(Combined_data$Diet, useNA = "ifany"))
+stopifnot(all(Combined_data$Diet %in% c("ain76", "hc")))
+
 # Step 7: Format for r/qtl2 and Nextflow Module 1
 # Define which metadata columns to use as covariates for QTL analysis
 covariate_columns <- c("batch", "Sex", "generation", "coat_color", "Diet")  
@@ -336,13 +348,16 @@ cat("NA counts per phenotype:\n")
 print(colSums(is.na(lcms_data[, lcms_pheno_cols])))
 
 # --- Standardize Diet values to match eQTL pipeline format ---
-# (AIN76 samples should be "ain76a", HC samples should be "hc")
+# (one label per diet: AIN-76A, recorded as "ain76" or "ain76a", is written "ain76"; high choline is "hc";
+# see Step 6b above)
 cat("\nDiet values before standardization:\n")
 print(table(lcms_data$Diet, useNA = "ifany"))
 lcms_data <- lcms_data %>%
-  mutate(Diet = tolower(trimws(Diet)))
+  mutate(Diet = tolower(trimws(Diet)),
+         Diet = ifelse(Diet == "ain76a", "ain76", Diet))
 cat("Diet values after standardization:\n")
 print(table(lcms_data$Diet, useNA = "ifany"))
+stopifnot(all(lcms_data$Diet %in% c("ain76", "hc")))
 
 # --- Format for r/qtl2 CSV (3-row header structure) ---
 covariate_columns <- c("batch", "Sex", "generation", "coat_color", "Diet")

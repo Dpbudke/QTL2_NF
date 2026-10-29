@@ -19,6 +19,7 @@ params.auto_prefix_samples = false
 params.test_mode = false
 params.lod_threshold = 7.0
 params.sample_filter = null
+params.covariate_levels = null
 params.interactive_covar = null
 params.exclude_covariates = null
 params.help = false
@@ -70,6 +71,7 @@ def helpMessage() {
         --input_dir         Directory to load cached results from (defaults to outdir if not specified)
         --lod_threshold     LOD threshold for filtering [default: 7.0]
         --sample_filter     JSON filter for sample subsetting
+        --covariate_levels  JSON of the allowed values of text covariates (step 01 only)
 
     Examples:
         # Full pipeline
@@ -157,8 +159,14 @@ if (params.analysis_type && !validAnalysisTypes.contains(params.analysis_type)) 
 def effective_outdir = params.outdir ?: 'results'
 
 def effective_sample_filter = params.sample_filter ?: (
-    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76", "ain76a"]}' :
+    params.analysis_type == 'AIN76_only' ? '{"Diet": ["ain76"]}' :
     params.analysis_type == 'HC_only' ? '{"Diet": ["hc"]}' : null
+)
+
+// The DO_Chln presets expect one label per diet: ain76 (AIN-76A, which older metadata also records as ain76a)
+// and hc (high choline). Any other Diet value stops step 01; see --covariate_levels.
+def effective_covariate_levels = params.covariate_levels ?: (
+    params.analysis_type ? '{"Diet": ["ain76", "hc"]}' : null
 )
 
 def effective_exclude_covariates = params.exclude_covariates ?: (
@@ -182,6 +190,7 @@ if (params.analysis_type) {
         outdir             : ${effective_outdir}
         resume_from        : ${params.resume_from ?: 'beginning (full run)'}
         sample_filter      : ${effective_sample_filter ?: 'null (full cohort)'}
+        covariate_levels   : ${effective_covariate_levels ?: 'null (not checked)'}
         exclude_covariates : ${effective_exclude_covariates ?: 'null'}
         interactive_covar  : ${effective_interactive_covar ?: 'null (additive model)'}
     """.stripIndent()
@@ -298,7 +307,8 @@ workflow {
             ch_study_prefix,
             Channel.value(effective_sample_filter ?: "null"),
             Channel.value(effective_exclude_covariates ?: "null"),
-            Channel.value(params.single_sex ?: "null")
+            Channel.value(params.single_sex ?: "null"),
+            Channel.value(effective_covariate_levels ?: "null")
         )
 
         ch_pheno = PHENOTYPE_PROCESS.out.pheno

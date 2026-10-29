@@ -8,6 +8,7 @@ process PHENOTYPE_PROCESS {
     val(sample_filter_json)
     val(exclude_covariates)
     val(single_sex)
+    val(covariate_levels_json)
 
     output:
     path("${prefix}_covar.csv"), emit: covar
@@ -84,7 +85,48 @@ process PHENOTYPE_PROCESS {
     
     validation_log <- c(validation_log, paste("✓ Successfully read phenotype file"))
     validation_log <- c(validation_log, paste("  - Initial dimensions:", nrow(mPhen), "individuals x", ncol(mPhen), "variables"))
-    
+
+    # =============================================================================
+    # COVARIATE LEVELS
+    # =============================================================================
+    # A text covariate becomes one model column per level after the first, so a second label for the same group
+    # (a typo, or a diet recorded under two names) becomes a group of its own without any error. Every text
+    # covariate's levels go to the log, and --covariate_levels stops the run on any value outside its list. It runs
+    # before the sample filter, so a filter cannot drop the unexpected samples first.
+    level_log <- c("", "=== Covariate Levels ===")
+    for (cn in colnames(mPhen)[seq_len(pheno_start_col - 1)]) {
+        if (is.numeric(mPhen[[cn]])) next
+        tab <- table(mPhen[[cn]], useNA = "ifany")
+        level_log <- c(level_log, paste0("  ", cn, ": ", paste(names(tab), "=", tab, collapse = ", ")))
+    }
+    covariate_levels_str <- '${covariate_levels_json}'
+    if (covariate_levels_str != "null" && nchar(covariate_levels_str) > 0) {
+        expected_levels <- tryCatch(jsonlite::fromJSON(covariate_levels_str), error = function(e) {
+            stop("Error parsing covariate_levels JSON: ", e\$message, "\\nProvided: ", covariate_levels_str)
+        })
+        level_problems <- c()
+        for (cn in names(expected_levels)) {
+            if (!cn %in% colnames(mPhen)[seq_len(pheno_start_col - 1)]) {
+                level_problems <- c(level_problems, paste0(cn, ": not a covariate column of the input"))
+                next
+            }
+            v <- as.character(mPhen[[cn]])
+            extra <- table(v[is.na(v) | !v %in% expected_levels[[cn]]], useNA = "ifany")
+            if (length(extra) > 0) {
+                level_problems <- c(level_problems, paste0(cn, ": ", paste(names(extra), "=", extra, collapse = ", "),
+                    " (expected only ", paste(expected_levels[[cn]], collapse = ", "), ")"))
+            }
+        }
+        if (length(level_problems) > 0) {
+            stop("Covariate values outside --covariate_levels:\\n  ", paste(level_problems, collapse = "\\n  "),
+                 "\\nGive each group one label in the input, or change --covariate_levels if these are new groups.",
+                 "\\nDO_Chln: ain76a is the same AIN-76A diet as ain76; Metadata_phenotype_QTL2_NF.Rmd writes it as ain76.")
+        }
+        level_log <- c(level_log, paste("✓ Covariate values match --covariate_levels:", covariate_levels_str))
+    }
+    validation_log <- c(validation_log, level_log)
+    cat(paste(level_log, collapse = "\\n"), "\\n")
+
     # =============================================================================
     # SAMPLE FILTERING BY COVARIATES
     # =============================================================================
