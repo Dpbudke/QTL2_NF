@@ -297,6 +297,29 @@ The workflow detects prior progress by checking for on-disk artifacts in priorit
 
 **Resources**: PERM_SETUP (4 CPUs, 32 GB, 10 min), PERM_COORDINATOR_SCREEN/FULL (1 CPU, 4 GB, 30-day wall time each), Batch Workers (48 CPUs, 200 GB, 2 h each), PERM_AGGREGATE_SCREEN (4 CPUs, 32 GB, 1 h), PERM_AGGREGATE (4 CPUs, 32 GB, 1 h)
 
+### Thresholds for a whole model (pooled screen permutations)
+
+Per-phenotype thresholds for a whole transcriptome take weeks. When every phenotype is in normal scores, as the
+expression values from `Metadata_phenotype_QTL2_NF.Rmd` are, all phenotypes have nearly the same null distribution,
+and one set of thresholds per model, pooled from the screen permutations, serves every phenotype. The lab's 2026
+DO_Chln eQTL used this: on the 2025 design, the pooled 95% threshold of `Diet_additive` was LOD 7.93 against a
+median of 7.95 for the 2025 per-gene thresholds (sd 0.10). Per-phenotype permutations can still be run later for
+chosen phenotypes.
+
+1. Run `main.nf` as usual. Once a few hundred phenotypes have finished their screen batches
+   (`<outdir>/07_permutation_testing/batches_screen`; 2,054 to 7,361 per model in 2026), stop the run: cancel the
+   pending tasks of the coordinator's arrays (`scancel --state=PENDING <array job>`, the job IDs are in the
+   coordinator log), then the Nextflow head job and the coordinator. Running tasks finish and write their files by
+   rename.
+2. In the pipeline image, `Rscript bin/pooled_thresholds.R <outdir> <new input folder> <study prefix>`. It writes
+   the input folder (links to steps 01 to 06, the pooled `<prefix>_permThresh.rds` for every phenotype that passed
+   the LOD pre-filter, and `pooled_thresholds.tsv`) and checks the assumption: `pooled_threshold_spread.tsv`
+   compares the spread of the phenotypes' own 95% quantiles with the spread sampling alone gives. A ratio near 1
+   means one threshold set fits (2026 DO_Chln: 1.01 to 1.05 in all four models); well above 1, use per-phenotype
+   thresholds.
+3. `nextflow run main_resume.nf <the run's settings> --resume_from significant_qtls --input_dir <new input folder>
+   --outdir <new results folder>` runs steps 08 to 10 and the cis/trans analysis with those thresholds.
+
 ### Module 8: Significant QTL Identification (`08_identify_significant_qtls.nf`)
 **Purpose**: Statistical QTL calling using empirical permutation thresholds with multi-level significance classification
 
