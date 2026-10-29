@@ -375,7 +375,7 @@ workflow {
             ch_control_file = GENERATE_CONTROL_FILE.out.control_file
 
             GENERATE_CONTROL_FILE.out.control_file.view { "Control file created: $it" }
-        } else {
+        } else if (!stopsBefore('control')) {
             log.info "Skipping GENERATE_CONTROL_FILE - loading from existing files"
             ch_control_file = Channel.fromPath(checkFileExists("${input_dir}/03_control_file_generation/${params.study_prefix}_control.json", "control file"))
         }
@@ -392,7 +392,7 @@ workflow {
 
             ch_cross2_object = CREATE_CROSS2_OBJECT.out.cross2_object
             CREATE_CROSS2_OBJECT.out.validation_report.view { "Cross2 validation report: $it" }
-        } else {
+        } else if (!stopsBefore('cross2')) {
             log.info "Skipping CREATE_CROSS2_OBJECT - loading from existing files"
             ch_cross2_object = Channel.fromPath(checkFileExists("${input_dir}/04_cross2_creation/${params.study_prefix}_cross2.rds", "cross2 object"))
         }
@@ -416,7 +416,7 @@ workflow {
             ch_cross2_for_setup = PREPARE_GENOME_SCAN_SETUP.out.setup_report
                 .combine(ch_cross2_object)
                 .map { report, cross2 -> cross2 }
-        } else {
+        } else if (!stopsBefore('prepare_scan')) {
             // Load from existing files when Module 5 skipped
             ch_genoprob = Channel.fromPath(checkFileExists("${input_dir}/05_genome_scan_preparation/${params.study_prefix}_genoprob.rds", "genotype probabilities"))
             ch_alleleprob = Channel.fromPath(checkFileExists("${input_dir}/05_genome_scan_preparation/${params.study_prefix}_alleleprob.rds", "allele probabilities"))
@@ -481,7 +481,7 @@ workflow {
             COMBINE_BATCH_RESULTS.out.batch_summary.view { "Batch processing summary: $it" }
             COMBINE_BATCH_RESULTS.out.peaks.view { "Peaks found: $it" }
 
-        } else {
+        } else if (!stopsBefore('genome_scan')) {
             log.info "Skipping GENOME_SCAN_BATCH - loading from existing files"
 
             // Load existing combined results
