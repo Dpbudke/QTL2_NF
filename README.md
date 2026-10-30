@@ -632,6 +632,10 @@ apptainer pull qtl2_nf_1.0.1.sif docker://ghcr.io/bjbennettlab/qtl2_nf:1.0.1
 sha256sum qtl2_nf_1.0.1.sif   # pass with --sif qtl2_nf_1.0.1.sif --sif_sha256 <this value>
 ```
 
+1.0.1 is published (October 30, 2026), and the 200-gene DO_Chln pilot scan gives the same LOD scores with it as with
+1.0.0. On Ceres the checked file is `/project/do2_projects/containers/qtl2_nf_1.0.1.sif`, with its SHA-256 in
+`qtl2_nf_1.0.1.sif.sha256`. Runs still default to 1.0.0, the image the lab's DO_Chln results were made with.
+
 **3. No path configuration required**
 
 All paths in `nextflow.config` use `${projectDir}`, a Nextflow built-in variable that automatically resolves to the directory containing `main.nf`. The pipeline works correctly regardless of what the cloned directory is named or where it lives on the filesystem.
